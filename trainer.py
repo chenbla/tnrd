@@ -23,25 +23,25 @@ import numpy as np
 
 _EImage = -1
 
-class Round(InplaceFunction):
-
-    @staticmethod
-    def forward(ctx, input,inplace):
-
-        ctx.inplace = inplace                                                                          
-        if ctx.inplace:
-            ctx.mark_dirty(input)
-            output = input
-        else:
-            output = input.clone()
-        output.round_()
-        return output
-
-    @staticmethod
-    def backward(ctx, grad_output):
-        # straight-through estimator
-        grad_input = grad_output
-        return grad_input,None
+# class Round(InplaceFunction):
+#
+#     @staticmethod
+#     def forward(ctx, input,inplace):
+#
+#         ctx.inplace = inplace
+#         if ctx.inplace:
+#             ctx.mark_dirty(input)
+#             output = input
+#         else:
+#             output = input.clone()
+#         output.round_()
+#         return output
+#
+#     @staticmethod
+#     def backward(ctx, grad_output):
+#         # straight-through estimator
+#         grad_input = grad_output
+#         return grad_input,None
 
 class L2Loss_image(torch.nn.Module):
     """docstring for L2Loss_image."""

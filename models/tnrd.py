@@ -25,7 +25,7 @@ def initialize_weights(net, scale=1.):
                 m.weight.data *= scale  # for residual block
                 if not _TIE and isinstance(m, TNRDlayer):
                     nn.init.kaiming_normal_(m.weight2, a=0, mode='fan_in')
-                    m.weight.data *= scale  # for residual block                  
+                    m.weight.data *= scale  # for residual block
                 if m.bias is not None and not isinstance(m, TNRDlayer):
                     m.bias.data.zero_()
             elif isinstance(m, nn.Linear):
@@ -47,7 +47,7 @@ def init_model_param(model,num_reb_kernels=63,filter_size=5,stage=8,init_weight_
     NumW = num_reb_kernels
     step = 0.2
     delta = 10
-    
+
     D = np.arange(-delta+means[0],means[-1]+delta,step)
     D_mu = D.reshape(1,-1).repeat(NumW,0) - means.reshape(-1,1).repeat(D.size,1)
     offsetD = D[1]
@@ -55,7 +55,7 @@ def init_model_param(model,num_reb_kernels=63,filter_size=5,stage=8,init_weight_
     G = np.exp(-0.5*precision*D_mu**2)
     filtN =  filter_size**2 - 1
     m = filter_size**2 - 1
-    
+
     ww = np.array(w0).reshape(-1,1).repeat(filtN,1)
     cof_beta = np.eye(m,m)
     #x0 = zeros(length(cof_beta(:)) + 1 + filtN*mfs.NumW, stage);
@@ -70,21 +70,21 @@ def init_model_param(model,num_reb_kernels=63,filter_size=5,stage=8,init_weight_
             init_layer_params(module,cof_beta, pp[i], ww*theta[i],init_weight_dct)
 
 def init_layer_params(m,beta,p,wt,init_weight_dct):
-    
+
     with torch.no_grad():
         if init_weight_dct:
-            m.weight.copy_(torch.Tensor(beta))  
-        else: 
+            m.weight.copy_(torch.Tensor(beta))
+        else:
             n = m.kernel_size**2 * m.in_channels
-            m.weight.data.normal_(0, math.sqrt(2. / n))     
+            m.weight.data.normal_(0, math.sqrt(2. / n))
             if not _TIE and isinstance(m, TNRDlayer):
                 weight_rot180 = torch.rot90(torch.rot90(m.weight.data.detach(), 1, [2, 3]),1,[2,3])
-                m.weight2.data.copy_(weight_rot180)   
-                #m.weight2.data.normal_(0, math.sqrt(2. / n))             
+                m.weight2.data.copy_(weight_rot180)
+                #m.weight2.data.normal_(0, math.sqrt(2. / n))
             #initialize_weights(m,0.02)
         m.alpha.copy_(torch.Tensor([p]))
         if m.act.weight.shape[-1]==24:
-            m.act.weight.copy_(torch.Tensor(wt).unsqueeze(1))    
+            m.act.weight.copy_(torch.Tensor(wt).unsqueeze(1))
 
 
 class TNRDConv2d(nn.Conv2d):
@@ -101,7 +101,7 @@ class TNRDConv2d(nn.Conv2d):
         initialize_weights_dct([self], 0.02)
         self.pad_input=torchvision.transforms.Pad(5,padding_mode='edge')
         #initialize_weights([self.act], 0.00002)
-        self.counter = 0 
+        self.counter = 0
     def forward(self,input):
         self.counter+=1
         u,f=input
@@ -173,19 +173,15 @@ class TNRDlayer(nn.Module):
             # up = transform(up).unsqueeze(0)#.cuda()
 
             #%%% test
+            #https://stackoverflow.com/questions/55466298/pytorch-cant-call-numpy-on-variable-that-requires-grad-use-var-detach-num
             from PIL import Image
-            u_np = Image.fromarray(u[0][0].numpy())
+            u_np = Image.fromarray(u[0][0].detach().numpy())
             up_pil = self.pad_input(u_np)
             up = transform(up_pil).unsqueeze(0)#.cuda()
 
             print("--")
-            # print(u[0][0][0][0])
             coordinate = x, y = 0, 0
             print("u before: {}, u pill: {}, u padded: {}".format( u[0][0][0][0], u_np.getpixel(coordinate), up[0][0][12][12] ))
-            # pixels = u_np.load()
-            # print(pixels[0,0])
-            # u_tensor = transform(u_np).squeeze(0)
-            # print(u_tensor[0,0])
             #%%%
             ###
 
@@ -218,18 +214,18 @@ class TNRDlayer(nn.Module):
             u = u-output.sum(1,keepdim=True)-self.alpha.exp()*(u-f)
         return u,f
 
-class GenBlock(nn.Module):
-    def __init__(self, in_channels=64, out_channels=64, kernel_size=5, bias=True):
-        super(GenBlock, self).__init__()
-        self.conv = TNRDConv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size, padding=(kernel_size // 2), bias=bias)
-        self.bn = nn.BatchNorm2d(num_features=out_channels)
-        self.relu = nn.ReLU(inplace=True)
-
-        initialize_weights([self.conv, self.bn], 0.02)
-
-    def forward(self, x):
-        x = self.relu(self.bn(self.conv(x)))
-        return x
+# class GenBlock(nn.Module):
+#     def __init__(self, in_channels=64, out_channels=64, kernel_size=5, bias=True):
+#         super(GenBlock, self).__init__()
+#         self.conv = TNRDConv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size, padding=(kernel_size // 2), bias=bias)
+#         self.bn = nn.BatchNorm2d(num_features=out_channels)
+#         self.relu = nn.ReLU(inplace=True)
+#
+#         initialize_weights([self.conv, self.bn], 0.02)
+#
+#     def forward(self, x):
+#         x = self.relu(self.bn(self.conv(x)))
+#         return x
 
 class DisBlock(nn.Module):
     def __init__(self, in_channels=64, out_channels=64, bias=True, normalization=False):
@@ -251,31 +247,31 @@ class DisBlock(nn.Module):
         x = self.lrelu(self.bn2(self.conv2(x)))
         return x
 
-class Generatorv1(nn.Module):
-    def __init__(self, in_channels, num_features, gen_blocks, dis_blocks):
-        super(Generatorv1, self).__init__()
-        filter_size=5
-        # image to features
-        in_channels=filter_size**2
-        
-        #self.crop_output=torchvision.transforms.CenterCrop(50)
-        self.image_to_features = TNRDConv2d(in_channels=in_channels, out_channels=in_channels,kernel_size=filter_size, groups=in_channels)
-        # features
-        blocks = []
-        for _ in range(gen_blocks):
-            blocks.append(TNRDConv2d(in_channels=in_channels, out_channels=in_channels,kernel_size=filter_size, bias=False,groups=in_channels))
-        self.features = nn.Sequential(*blocks)
-
-        # features to image
-        self.features_to_image = TNRDConv2d(in_channels=in_channels, out_channels=in_channels, kernel_size=filter_size,groups=in_channels)
-        initialize_weights([self.features_to_image], 0.02)
-        self.counter=0
-    def forward(self, x):
-        self.counter+=1
-        x = self.image_to_features([x,x])
-        x = self.features(x)
-        x = self.features_to_image(x)
-        return x[0]
+# class Generatorv1(nn.Module):
+#     def __init__(self, in_channels, num_features, gen_blocks, dis_blocks):
+#         super(Generatorv1, self).__init__()
+#         filter_size=5
+#         # image to features
+#         in_channels=filter_size**2
+#
+#         #self.crop_output=torchvision.transforms.CenterCrop(50)
+#         self.image_to_features = TNRDConv2d(in_channels=in_channels, out_channels=in_channels,kernel_size=filter_size, groups=in_channels)
+#         # features
+#         blocks = []
+#         for _ in range(gen_blocks):
+#             blocks.append(TNRDConv2d(in_channels=in_channels, out_channels=in_channels,kernel_size=filter_size, bias=False,groups=in_channels))
+#         self.features = nn.Sequential(*blocks)
+#
+#         # features to image
+#         self.features_to_image = TNRDConv2d(in_channels=in_channels, out_channels=in_channels, kernel_size=filter_size,groups=in_channels)
+#         initialize_weights([self.features_to_image], 0.02)
+#         self.counter=0
+#     def forward(self, x):
+#         self.counter+=1
+#         x = self.image_to_features([x,x])
+#         x = self.features(x)
+#         x = self.features_to_image(x)
+#         return x[0]
 
 class Generator(nn.Module):
     def __init__(self, in_channels, num_features, gen_blocks, dis_blocks):
@@ -333,28 +329,28 @@ class Discriminator(nn.Module):
         x = x.flatten(start_dim=1).mean(dim=-1)
         return x
 
-class SNDiscriminator(nn.Module):
-    def __init__(self, in_channels, num_features, gen_blocks, dis_blocks):
-        super(SNDiscriminator, self).__init__()
-
-        # image to features
-        self.image_to_features = DisBlock(in_channels=in_channels, out_channels=num_features, bias=True, normalization=True)
-
-        # features
-        blocks = []
-        for i in range(0, dis_blocks - 1):
-            blocks.append(DisBlock(in_channels=num_features * min(pow(2, i), 8), out_channels=num_features * min(pow(2, i + 1), 8), bias=False, normalization=True))
-        self.features = nn.Sequential(*blocks)
-
-        # classifier
-        self.classifier = SpectralNorm(nn.Conv2d(in_channels=num_features * min(pow(2, dis_blocks - 1), 8), out_channels=1, kernel_size=4, padding=0))
-
-    def forward(self, x):
-        x = self.image_to_features(x)
-        x = self.features(x)
-        x = self.classifier(x)
-        x = x.flatten(start_dim=1).mean(dim=-1)
-        return x
+# class SNDiscriminator(nn.Module):
+#     def __init__(self, in_channels, num_features, gen_blocks, dis_blocks):
+#         super(SNDiscriminator, self).__init__()
+#
+#         # image to features
+#         self.image_to_features = DisBlock(in_channels=in_channels, out_channels=num_features, bias=True, normalization=True)
+#
+#         # features
+#         blocks = []
+#         for i in range(0, dis_blocks - 1):
+#             blocks.append(DisBlock(in_channels=num_features * min(pow(2, i), 8), out_channels=num_features * min(pow(2, i + 1), 8), bias=False, normalization=True))
+#         self.features = nn.Sequential(*blocks)
+#
+#         # classifier
+#         self.classifier = SpectralNorm(nn.Conv2d(in_channels=num_features * min(pow(2, dis_blocks - 1), 8), out_channels=1, kernel_size=4, padding=0))
+#
+#     def forward(self, x):
+#         x = self.image_to_features(x)
+#         x = self.features(x)
+#         x = self.classifier(x)
+#         x = x.flatten(start_dim=1).mean(dim=-1)
+#         return x
 
 def g_tnrd(**config):
     config.setdefault('in_channels', 3)
