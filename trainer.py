@@ -48,20 +48,16 @@ class L2Loss_image(torch.nn.Module):
 
     def __init__(self):
         super(L2Loss_image, self).__init__()
-        self.stochastic = False
+        # self.stochastic = False
     def forward(self,x,y):
-        if self.stochastic:
-            noise = x.new(x.shape).uniform_(-0.5, 0.5)
-            x.add_(noise)
+        # if self.stochastic:
+        #     noise = x.new(x.shape).uniform_(-0.5, 0.5)
+        #     x.add_(noise)
         return l2_loss_image(x,y)
 
 def l2_loss_image(x,y):
-    #x = x.mul(255).clamp(0, 255)
     x = x.clamp(0, 255)
-    #x =  Round().apply(x.clamp(0, 255),False)
-    #y = y.mul(255).clamp(0, 255)
-    y =  y.clamp(0, 255)
-    #y =  Round().apply(y.clamp(0, 255),False)
+    y = y.clamp(0, 255)
     return (x-y).pow(2).mean()
 
 class Trainer():
@@ -79,7 +75,6 @@ class Trainer():
         # initialize
         self._init()
 
-    # the original code:
     def _init_model(self):
         # initialize model
         if self.args.model_config != '':
@@ -88,44 +83,33 @@ class Trainer():
             model_config = {}
 
         g_model = models.__dict__[self.args.g_model]
-        d_model = models.__dict__[self.args.d_model]
         self.g_model = g_model(**model_config)
-        self.d_model = d_model(**model_config)
 
         # loading weights
         if self.args.gen_to_load != '':
             logging.info('\nLoading g-model...')
             self.g_model.load_state_dict(torch.load(self.args.gen_to_load, map_location='cpu'))
-        if self.args.dis_to_load != '':
-            logging.info('\nLoading d-model...')
-            self.d_model.load_state_dict(torch.load(self.args.dis_to_load, map_location='cpu'))
 
         # to cuda
         self.g_model = self.g_model.to(self.args.device)
-        self.d_model = self.d_model.to(self.args.device)
 
         # parallel
         if self.args.device_ids and len(self.args.device_ids) > 1:
             self.g_model = torch.nn.DataParallel(self.g_model, self.args.device_ids)
-            self.d_model = torch.nn.DataParallel(self.d_model, self.args.device_ids)
 
         # print model
         if self.print_model:
             logging.info(self.g_model)
             logging.info('Number of parameters in generator: {}\n'.format(sum([l.nelement() for l in self.g_model.parameters()])))
-            logging.info(self.d_model)
-            logging.info('Number of parameters in discriminator: {}\n'.format(sum([l.nelement() for l in self.d_model.parameters()])))
             self.print_model = False
 
     def _init_optim(self):
         # initialize optimizer
         self.g_optimizer = torch.optim.Adam(self.g_model.parameters(), lr=self.args.lr, betas=self.args.gen_betas)
         #self.g_optimizer = torch.optim.SGD(self.g_model.parameters(), lr=self.args.lr,momentum=0.9)
-        self.d_optimizer = torch.optim.Adam(self.d_model.parameters(), lr=self.args.lr, betas=self.args.dis_betas)
 
         # initialize scheduler
         self.g_scheduler = StepLR(self.g_optimizer, step_size=self.args.step_size, gamma=self.args.gamma)
-        self.d_scheduler = StepLR(self.d_optimizer, step_size=self.args.step_size, gamma=self.args.gamma)
 
         # initialize criterion
         if self.args.reconstruction_weight:
@@ -136,6 +120,7 @@ class Trainer():
             self.textural = TexturalLoss(features_to_compute=['relu3_1', 'relu2_1'], shave_edge=self.invalidity_margins).to(self.args.device)
         if self.args.range_weight > 0.:
             self.range = RangeLoss(invalidity_margins=self.invalidity_margins).to(self.args.device)
+
 
     def _init(self):
         # init parameters
@@ -180,7 +165,7 @@ class Trainer():
     def _save_model(self, epoch):
         # save models
         torch.save(self.g_model.state_dict(), os.path.join(self.args.save_path, '{}_e{}.pt'.format(self.args.g_model, epoch + 1)))
-        torch.save(self.d_model.state_dict(), os.path.join(self.args.save_path, '{}_e{}.pt'.format(self.args.d_model, epoch + 1)))
+        # torch.save(self.d_model.state_dict(), os.path.join(self.args.save_path, '{}_e{}.pt'.format(self.args.d_model, epoch + 1)))
         torch.save(self.losses, os.path.join(self.args.save_path, 'losses_e{}.pt'.format(epoch + 1)))
 
     def _set_require_grads(self, model, require_grad):
@@ -420,14 +405,12 @@ class Trainer():
         targets = data['target']
         paths = data['path']
 
-        ##test
-        # from PIL import Image
-        # with Image.open("C:/Users/ck/Desktop/masters_degree/courses/049064_-_Variational_Methods_in_Image_Processing/final_project/code/from_itayhubara/TNRD-pytorch-main/denoising/my_images/Analysis/test003.png") as im:
-        #     outputs = self.g_model(im)
-
-        ##
-
         # evaluation
+
+        # test:
+        # import matplotlib.pyplot as plt
+        # plt.imshow(inputs[0][0].numpy())
+        # plt.show()
 
         with torch.no_grad():
             outputs = self.g_model(inputs) 
@@ -448,7 +431,7 @@ class Trainer():
    
     def _train_epoch(self, loader):
         self.g_model.train()
-        self.d_model.train()
+        # self.d_model.train()
 
         # train over epochs
         for _, data in enumerate(loader):
@@ -496,7 +479,7 @@ class Trainer():
 
             # scheduler
             self.g_scheduler.step(epoch=epoch)
-            self.d_scheduler.step(epoch=epoch)
+            # self.d_scheduler.step(epoch=epoch)
 
             # evaluation
             if ((epoch + 1) % self.args.eval_every == 0) or ((epoch + 1) == self.args.epochs):

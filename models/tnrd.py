@@ -42,28 +42,14 @@ def init_model_param(model,num_reb_kernels=63,filter_size=5,stage=8,init_weight_
     w0 = np.load('w0_orig.npy')
     w0 = np.histogram(np.random.randn(1000)*0.02,num_reb_kernels-1)[1] if _NRBF != 63 else w0
     #
-    means=np.linspace(-310,310,num_reb_kernels)
-    precision=0.01
-    NumW = num_reb_kernels
-    step = 0.2
-    delta = 10
-
-    D = np.arange(-delta+means[0],means[-1]+delta,step)
-    D_mu = D.reshape(1,-1).repeat(NumW,0) - means.reshape(-1,1).repeat(D.size,1)
-    offsetD = D[1]
-    nD = D.size
-    G = np.exp(-0.5*precision*D_mu**2)
     filtN =  filter_size**2 - 1
     m = filter_size**2 - 1
 
     ww = np.array(w0).reshape(-1,1).repeat(filtN,1)
     cof_beta = np.eye(m,m)
-    #x0 = zeros(length(cof_beta(:)) + 1 + filtN*mfs.NumW, stage);
     theta = [10, 5]+ np.ones(stage-2).tolist()
     pp = [math.log(1.0)]+ (math.log(0.1)*np.ones(stage-1)).tolist()
-    # beta = [log(1) log(0.1)*ones(1,stage-1)];
     i=-1
-    #import pdb; pdb.set_trace()
     for module in model.modules():
         if isinstance(module,TNRDlayer):
             i+=1
@@ -80,8 +66,6 @@ def init_layer_params(m,beta,p,wt,init_weight_dct):
             if not _TIE and isinstance(m, TNRDlayer):
                 weight_rot180 = torch.rot90(torch.rot90(m.weight.data.detach(), 1, [2, 3]),1,[2,3])
                 m.weight2.data.copy_(weight_rot180)
-                #m.weight2.data.normal_(0, math.sqrt(2. / n))
-            #initialize_weights(m,0.02)
         m.alpha.copy_(torch.Tensor([p]))
         if m.act.weight.shape[-1]==24:
             m.act.weight.copy_(torch.Tensor(wt).unsqueeze(1))
@@ -157,35 +141,7 @@ class TNRDlayer(nn.Module):
         self.counter+=1
         u,f=input
         for it in range(1):
-
-            ## my changes
-            import torchvision.transforms as T
-            # convert the tensor to PIL image using above transform
-            cuda = torch.device('cuda')
-
-            # tensor = u[0][0].cpu()
-            # transform = T.ToPILImage()
-            # u_new = transform(tensor)
-            # up = self.pad_input(u_new)
-            #
-            import torchvision.transforms as transforms
-            transform = transforms.ToTensor()
-            # up = transform(up).unsqueeze(0)#.cuda()
-
-            #%%% test
-            #https://stackoverflow.com/questions/55466298/pytorch-cant-call-numpy-on-variable-that-requires-grad-use-var-detach-num
-            from PIL import Image
-            u_np = Image.fromarray(u[0][0].detach().numpy())
-            up_pil = self.pad_input(u_np)
-            up = transform(up_pil).unsqueeze(0)#.cuda()
-
-            print("--")
-            coordinate = x, y = 0, 0
-            print("u before: {}, u pill: {}, u padded: {}".format( u[0][0][0][0], u_np.getpixel(coordinate), up[0][0][12][12] ))
-            #%%%
-            ###
-
-            # up = self.pad_input(u) ##-chen: i removed it!!
+            up = self.pad_input(u) ##-chen: i removed it!!
             ur = up.repeat(1,self.in_channels,1,1)
             #import pdb; pdb.set_trace()
             if _DCT:
@@ -193,11 +149,6 @@ class TNRDlayer(nn.Module):
                 K = K.div(torch.norm(K,dim=1,keepdim=True)+2.2e-16).view(self.kernel_size**2-1,1,self.kernel_size,self.kernel_size)
             else:
                 K = self.weight    
-
-            ##
-            #chen:
-            # K = K.cpu()
-            ##
 
             output1 = F.conv2d(ur, K, None, self.stride, self.padding, self.dilation, self.groups)
             output,_ = self.act(output1)
@@ -210,8 +161,7 @@ class TNRDlayer(nn.Module):
             if self.counter%500==0:
                 print(self.alpha,self.beta.max(),self.beta.min(),self.act.weight.max(),self.act.weight.min(),output.sum(1,keepdim=True).max())
             beta = self.beta if _BETA else 1
-            # u = u-output.mul(beta).sum(1,keepdim=True)-self.alpha.exp()*(u-f) ## chen: i removed it
-            u = u-output.sum(1,keepdim=True)-self.alpha.exp()*(u-f)
+            u = u-output.mul(beta).sum(1,keepdim=True)-self.alpha.exp()*(u-f)
         return u,f
 
 # class GenBlock(nn.Module):

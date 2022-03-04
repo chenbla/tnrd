@@ -13,7 +13,7 @@ from random import randint
 # torch.autograd.set_detect_anomaly(True)
 
 def get_arguments():
-    parser = argparse.ArgumentParser(description='super-resolution')
+    parser = argparse.ArgumentParser()
     parser.add_argument('--device', default='cuda', help='device assignment ("cpu" or "cuda")')
     parser.add_argument('--device-ids', default=[0], type=int, nargs='+', help='device ids assignment (e.g 0 1 2 3')
     parser.add_argument('--d-model', default='d_dncnn', help='discriminator architecture (default: dncnn)')
@@ -42,7 +42,7 @@ def get_arguments():
     parser.add_argument('--range-weight', default=0, type=float, help='pixel-weight (default: 0)')
     parser.add_argument('--reconstruction-weight', default=1.0, type=float, help='reconstruction-weight (default: 1.0)')
     parser.add_argument('--tnrd-energy-weight', default=0.0, type=float, help='tnrd-energy-weight (default: 1.0)')
-    parser.add_argument('--greedy-weight', default=0.0, type=float, help='greedy-weight (default: 1.0)')
+    # parser.add_argument('--greedy-weight', default=0.0, type=float, help='greedy-weight (default: 1.0)')
     parser.add_argument('--perceptual-weight', default=0, type=float, help='perceptual-weight (default: 0)')
     parser.add_argument('--adversarial-weight', default=0.01, type=float, help='adversarial-weight (default: 0.01)')
     parser.add_argument('--textural-weight', default=0, type=float, help='textural-weight (default: 0)')
