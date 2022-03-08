@@ -52,6 +52,9 @@ def get_arguments():
     parser.add_argument('--save', metavar='SAVE', default='', help='saved folder')
     parser.add_argument('--evaluation', default=False, action='store_true', help='evaluate a model (default: false)')
     parser.add_argument('--use-tb', default=False, action='store_true', help='use tensorboardx (default: false)')
+
+    parser.add_argument('--train_max_size', default=999999, type=int, help='limit the traint set')
+    parser.add_argument('--use_greedy_training', default=False, action='store_true', help='use greedy training (default: false)')
     args = parser.parse_args()
 
     time_stamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')

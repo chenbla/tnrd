@@ -299,42 +299,51 @@ class Trainer():
             loss += loss_recon * self.args.reconstruction_weight
             self.losses['G_recon'].append(loss_recon.data.item())
 
-        # range loss
-        if self.args.range_weight > 0.:
-            loss_rng = self.range(generated_data)
-            loss += loss_rng * self.args.range_weight
-            self.losses['G_rng'].append(loss_rng.data.item())
-
-        # adversarial loss
-        if self.args.adversarial_weight > 0.:
-            d_generated = self.d_model(generated_data)
-            if self.args.relativistic:
-               d_real = self.d_model(targets)
-               loss_adv = (d_real - d_generated.mean()).mean() - (d_generated - d_real.mean()).mean()
-            else:
-                loss_adv = -d_generated.mean()
-            loss += loss_adv * self.args.adversarial_weight
-            self.losses['G_adv'].append(loss_adv.data.item())
-
-        # perceptual loss
-        if self.args.perceptual_weight > 0.:
-            loss_perc = self.perceptual(generated_data, targets)
-            loss += loss_perc * self.args.perceptual_weight
-            self.losses['G_perc'].append(loss_perc.data.item())
-
-        # textural loss
-        if self.args.textural_weight > 0.:
-            loss_txt = self.textural(generated_data, targets)
-            loss += loss_txt * self.args.textural_weight
-            self.losses['G_txt'].append(loss_txt.data.item())
+        # chen - i removed it
+        # # range loss
+        # if self.args.range_weight > 0.:
+        #     loss_rng = self.range(generated_data)
+        #     loss += loss_rng * self.args.range_weight
+        #     self.losses['G_rng'].append(loss_rng.data.item())
+        #
+        # # adversarial loss
+        # if self.args.adversarial_weight > 0.:
+        #     d_generated = self.d_model(generated_data)
+        #     if self.args.relativistic:
+        #        d_real = self.d_model(targets)
+        #        loss_adv = (d_real - d_generated.mean()).mean() - (d_generated - d_real.mean()).mean()
+        #     else:
+        #         loss_adv = -d_generated.mean()
+        #     loss += loss_adv * self.args.adversarial_weight
+        #     self.losses['G_adv'].append(loss_adv.data.item())
+        #
+        # # perceptual loss
+        # if self.args.perceptual_weight > 0.:
+        #     loss_perc = self.perceptual(generated_data, targets)
+        #     loss += loss_perc * self.args.perceptual_weight
+        #     self.losses['G_perc'].append(loss_perc.data.item())
+        #
+        # # textural loss
+        # if self.args.textural_weight > 0.:
+        #     loss_txt = self.textural(generated_data, targets)
+        #     loss += loss_txt * self.args.textural_weight
+        #     self.losses['G_txt'].append(loss_txt.data.item())
 
         self.losses['tnrd_loss'].append(self.tnrd_loss(inputs).item())
 
-        if self.args.tnrd_energy_weight > 0.:
-            loss+=self.args.tnrd_energy_weight*self.tnrd_loss(inputs)
-        
-        #if self.steps<2e4:
-        #loss+=self.greedy_loss(targets)
+        # chen - i removed it
+        #if self.args.tnrd_energy_weight > 0.:
+        #    loss+=self.args.tnrd_energy_weight*self.tnrd_loss(inputs)
+
+        # chen: greedy - 1/3 of the epocs
+        if self.args.use_greedy_training:
+            if self.steps<0.3*self.args.epochs * self.args.train_max_size: #2e4:
+               loss += self.greedy_loss(targets)
+
+        add_dct_high_freq_regularization = True
+        if add_dct_high_freq_regularization:
+            pass
+
 
         #if len(self.losses['G_recon'])>1 and self.losses['G_recon'][-1]< min(self.losses['G_recon'][:-1]):
         #    print('new best G_recon model: ', self.losses['G_recon'][-1])
@@ -358,12 +367,13 @@ class Trainer():
         inputs = data['input'].to(self.device)
         targets = data['target'].to(self.device)
 
-        # critic iteration
-        if self.args.adversarial_weight > 0.:
-            if self.args.wgan:
-                self._critic_wgan_iteration(inputs, targets)
-            else:
-                self._critic_hinge_iteration(inputs, targets)
+        # chen: i removed it
+        # # critic iteration
+        # if self.args.adversarial_weight > 0.:
+        #     if self.args.wgan:
+        #         self._critic_wgan_iteration(inputs, targets)
+        #     else:
+        #         self._critic_hinge_iteration(inputs, targets)
 
         # only update generator every |critic_iterations| iterations
         if self.steps % self.args.num_critic == 0:
