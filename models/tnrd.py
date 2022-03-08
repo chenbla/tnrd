@@ -9,34 +9,34 @@ import numpy as np
 import math
 
 _NRBF=63 
-_DCT=False
+_DCT=True#False
 _TIE = False
 _BETA = False 
 _C1x1 = False
 __all__ = ['g_tnrd','d_tnrd','TNRDlayer']
 
-def initialize_weights(net, scale=1.):
-    if not isinstance(net, list):
-        net = [net]
-    for layer in net:
-        for m in layer.modules():
-            if isinstance(m, nn.Conv2d) or isinstance(m, TNRDConv2d) or isinstance(m, TNRDlayer):
-                nn.init.kaiming_normal_(m.weight, a=0, mode='fan_in')
-                m.weight.data *= scale  # for residual block
-                if not _TIE and isinstance(m, TNRDlayer):
-                    nn.init.kaiming_normal_(m.weight2, a=0, mode='fan_in')
-                    m.weight.data *= scale  # for residual block
-                if m.bias is not None and not isinstance(m, TNRDlayer):
-                    m.bias.data.zero_()
-            elif isinstance(m, nn.Linear):
-                nn.init.kaiming_normal_(m.weight, a=0, mode='fan_in')
-                m.weight.data *= scale
-                if m.bias is not None:
-                    m.bias.data.zero_()
-            elif isinstance(m, nn.BatchNorm2d):
-                nn.init.constant_(m.weight, 1)
-                nn.init.constant_(m.bias.data, 0.0)
-            
+# def initialize_weights(net, scale=1.):
+#     if not isinstance(net, list):
+#         net = [net]
+#     for layer in net:
+#         for m in layer.modules():
+#             if isinstance(m, nn.Conv2d) or isinstance(m, TNRDConv2d) or isinstance(m, TNRDlayer):
+#                 nn.init.kaiming_normal_(m.weight, a=0, mode='fan_in')
+#                 m.weight.data *= scale  # for residual block
+#                 if not _TIE and isinstance(m, TNRDlayer):
+#                     nn.init.kaiming_normal_(m.weight2, a=0, mode='fan_in')
+#                     m.weight.data *= scale  # for residual block
+#                 if m.bias is not None and not isinstance(m, TNRDlayer):
+#                     m.bias.data.zero_()
+#             elif isinstance(m, nn.Linear):
+#                 nn.init.kaiming_normal_(m.weight, a=0, mode='fan_in')
+#                 m.weight.data *= scale
+#                 if m.bias is not None:
+#                     m.bias.data.zero_()
+#             elif isinstance(m, nn.BatchNorm2d):
+#                 nn.init.constant_(m.weight, 1)
+#                 nn.init.constant_(m.bias.data, 0.0)
+#
 
 def init_model_param(model,num_reb_kernels=63,filter_size=5,stage=8,init_weight_dct=_DCT):
     w0 = np.load('w0_orig.npy')
@@ -141,27 +141,69 @@ class TNRDlayer(nn.Module):
         self.counter+=1
         u,f=input
         for it in range(1):
-            up = self.pad_input(u) ##-chen: i removed it!!
+            # chen: u shape: [2, 1, 100 ,100]
+            up = self.pad_input(u)
+            # chen: up shape: [2, 1, 124, 124]
             ur = up.repeat(1,self.in_channels,1,1)
+            # chen: ur shape: [2, 24, 124, 124]
+
             #import pdb; pdb.set_trace()
             if _DCT:
-                K=self.weight.matmul(self.dct_filters)
-                K = K.div(torch.norm(K,dim=1,keepdim=True)+2.2e-16).view(self.kernel_size**2-1,1,self.kernel_size,self.kernel_size)
+                K=self.weight.matmul(self.dct_filters)  # chen: self.weights shape [24, 24] ||self.dct_filters shape: [24, 25]
+                # chen: K shape [24,25]
+
+                # torch.norm(K,dim=1,keepdim=True) -> shape: [24,1] (norm of each wieghts*k)
+                #original:
+                #K = K.div(torch.norm(K,dim=1,keepdim=True)+2.2e-16).view(self.kernel_size**2-1,1,self.kernel_size,self.kernel_size)
+                # chen: K shape [24, 1, 5, 5]
+
+                # changed - remove the normalization
+                K = K.view(self.kernel_size**2-1,1,self.kernel_size,self.kernel_size)
+
             else:
-                K = self.weight    
+                K = self.weight
 
             output1 = F.conv2d(ur, K, None, self.stride, self.padding, self.dilation, self.groups)
+
+            # chen: output1 shape [2, 24, 120, 120]
+
             output,_ = self.act(output1)
-            weight_rot180 = torch.rot90(torch.rot90(K, 1, [2, 3]),1,[2,3]) if _TIE else self.weight2
+
+            # chen: output shape [2, 24, 120, 120]
+
+            # chen change:
+            weight_rot180 = torch.rot90(torch.rot90(K, 1, [2, 3]),1,[2,3]) #if _TIE else self.weight2
+            # original:
+            # weight_rot180 = torch.rot90(torch.rot90(K, 1, [2, 3]), 1, [2, 3]) if _TIE else self.weight2
+
+            # chen: weight_rot180 shape: [24, 1, 5, 5]
+
+            ## test - show one K element:
+            # import numpy as np
+            # import matplotlib.pyplot as plot
+            # t_rot = weight_rot180[0][0].cpu().detach().numpy() #without rotation
+            # t_rot = K[0][0].cpu().detach().numpy() #after rotation
+            # plot.matshow(t_rot, cmap='gray')
+            # plot.show()
+            ##
+
             if _C1x1:
                 output = F.conv2d(output, self.weight_1x1, None, self.stride, self.padding, self.dilation)
             output = F.conv2d(output, weight_rot180, None, self.stride, self.padding, self.dilation, self.groups)
+            # chen: output shape: [2, 24, 116, 116]
             output = F.pad(output,(-8,-8,-8,-8))
+            # chen: output shape: [2, 24, 100, 100]
             #
             if self.counter%500==0:
                 print(self.alpha,self.beta.max(),self.beta.min(),self.act.weight.max(),self.act.weight.min(),output.sum(1,keepdim=True).max())
             beta = self.beta if _BETA else 1
+
+            # chen change:
             u = u-output.mul(beta).sum(1,keepdim=True)-self.alpha.exp()*(u-f)
+            # chen: u shape: [2, 1, 100, 100]
+
+            # original:
+            # u = u - output.mul(beta).sum(1, keepdim=True) - self.alpha.exp() * (u - f)
         return u,f
 
 # class GenBlock(nn.Module):
@@ -177,25 +219,25 @@ class TNRDlayer(nn.Module):
 #         x = self.relu(self.bn(self.conv(x)))
 #         return x
 
-class DisBlock(nn.Module):
-    def __init__(self, in_channels=64, out_channels=64, bias=True, normalization=False):
-        super(DisBlock, self).__init__()
-        self.lrelu = nn.LeakyReLU(negative_slope=0.1, inplace=True)
-        self.conv1 = nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=3, padding=1, bias=bias)
-        self.conv2 = nn.Conv2d(in_channels=out_channels, out_channels=out_channels, kernel_size=4, stride=2, padding=1, bias=bias)
-        self.bn1 = nn.BatchNorm2d(out_channels, affine=True)
-        self.bn2 = nn.BatchNorm2d(out_channels, affine=True)
-
-        initialize_weights([self.conv1, self.conv2], 0.1)
-
-        if normalization:
-            self.conv1 = SpectralNorm(self.conv1)
-            self.conv2 = SpectralNorm(self.conv2)
-
-    def forward(self, x):
-        x = self.lrelu(self.bn1(self.conv1(x)))
-        x = self.lrelu(self.bn2(self.conv2(x)))
-        return x
+# class DisBlock(nn.Module):
+#     def __init__(self, in_channels=64, out_channels=64, bias=True, normalization=False):
+#         super(DisBlock, self).__init__()
+#         self.lrelu = nn.LeakyReLU(negative_slope=0.1, inplace=True)
+#         self.conv1 = nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=3, padding=1, bias=bias)
+#         self.conv2 = nn.Conv2d(in_channels=out_channels, out_channels=out_channels, kernel_size=4, stride=2, padding=1, bias=bias)
+#         self.bn1 = nn.BatchNorm2d(out_channels, affine=True)
+#         self.bn2 = nn.BatchNorm2d(out_channels, affine=True)
+#
+#         initialize_weights([self.conv1, self.conv2], 0.1)
+#
+#         if normalization:
+#             self.conv1 = SpectralNorm(self.conv1)
+#             self.conv2 = SpectralNorm(self.conv2)
+#
+#     def forward(self, x):
+#         x = self.lrelu(self.bn1(self.conv1(x)))
+#         x = self.lrelu(self.bn2(self.conv2(x)))
+#         return x
 
 # class Generatorv1(nn.Module):
 #     def __init__(self, in_channels, num_features, gen_blocks, dis_blocks):
@@ -256,28 +298,28 @@ class Generator(nn.Module):
         x = self.features_to_image(x)
         return x[0]
 
-class Discriminator(nn.Module):
-    def __init__(self, in_channels, num_features, gen_blocks, dis_blocks):
-        super(Discriminator, self).__init__()
-
-        # image to features
-        self.image_to_features = DisBlock(in_channels=in_channels, out_channels=num_features, bias=True, normalization=False)
-
-        # features
-        blocks = []
-        for i in range(0, dis_blocks - 1):
-            blocks.append(DisBlock(in_channels=num_features * min(pow(2, i), 8), out_channels=num_features * min(pow(2, i + 1), 8), bias=False, normalization=False))
-        self.features = nn.Sequential(*blocks)
-
-        # classifier
-        self.classifier = nn.Conv2d(in_channels=num_features * min(pow(2, dis_blocks - 1), 8), out_channels=1, kernel_size=4, padding=0)
-
-    def forward(self, x):
-        x = self.image_to_features(x)
-        x = self.features(x)
-        x = self.classifier(x)
-        x = x.flatten(start_dim=1).mean(dim=-1)
-        return x
+# class Discriminator(nn.Module):
+#     def __init__(self, in_channels, num_features, gen_blocks, dis_blocks):
+#         super(Discriminator, self).__init__()
+#
+#         # image to features
+#         self.image_to_features = DisBlock(in_channels=in_channels, out_channels=num_features, bias=True, normalization=False)
+#
+#         # features
+#         blocks = []
+#         for i in range(0, dis_blocks - 1):
+#             blocks.append(DisBlock(in_channels=num_features * min(pow(2, i), 8), out_channels=num_features * min(pow(2, i + 1), 8), bias=False, normalization=False))
+#         self.features = nn.Sequential(*blocks)
+#
+#         # classifier
+#         self.classifier = nn.Conv2d(in_channels=num_features * min(pow(2, dis_blocks - 1), 8), out_channels=1, kernel_size=4, padding=0)
+#
+#     def forward(self, x):
+#         x = self.image_to_features(x)
+#         x = self.features(x)
+#         x = self.classifier(x)
+#         x = x.flatten(start_dim=1).mean(dim=-1)
+#         return x
 
 # class SNDiscriminator(nn.Module):
 #     def __init__(self, in_channels, num_features, gen_blocks, dis_blocks):
