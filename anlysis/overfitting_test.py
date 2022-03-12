@@ -9,7 +9,7 @@ from statistics import mean
 outputs_dir_main_folder = "C:/project/denoising_my/results/results_automation_overfitting/"#"results/overfitting_results/"
 # outputs_dir_main_folder = "C:/project/denoising_my/results/results_automation_more_epocs/"#"results/overfitting_results/"
 
-outputs_dir_main_folder = "C:/project/denoising_my/results/results_automation/"
+outputs_dir_main_folder = "C:/project/denoising_my/results/results_automation__high_freq_regularization_partial/"
 
 color=['red','green','blue']
 

@@ -57,7 +57,8 @@ def get_arguments():
     parser.add_argument('--use_greedy_training', default=False, action='store_true', help='use greedy training (default: false)')
     parser.add_argument('--high_frequency_energy_weight', default=0.0, type=float, help='high_frequency-energy-weight (default: 0.0)')
     parser.add_argument('--use_dct_drop_out', default=False, action='store_true')
-    parser.add_argument('--dont_use_dct', default=False, action='store_false')
+    parser.add_argument('--dont_use_dct', default=False, action='store_true')
+    parser.add_argument('--dct_weight_decay', default=0.0, type=float, help='dct_weight_decay (default: 0.0)')
 
 
     args = parser.parse_args()

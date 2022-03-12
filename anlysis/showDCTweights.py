@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 weights_path = "C:/project/denoising_my/results/2022-03-05_14-54-37_-_500epocs_lr=1e-3/g_tnrd_e500.pt"
 # weights_path = "C:/project/denoising_my/results/2022-03-05_14-54-37_-_500epocs_lr=1e-3/g_tnrd_e10.pt"
 # weights_path = "C:/project/denoising_my/results/results_automation/output_dir_200_samples_original_sigma=50_epocs=2000/2022-03-07_12-32-49/g_tnrd_e2000.pt"
-weights_path = "C:/project/denoising_my/results/2022-03-09_07-49-35-remove_k_normalization/g_tnrd_e500.pt"
+weights_path = "C:/project/denoising_my/results/results_automation__high_freq_regularization_partial/output_dir_75_samples_hish-frequency-loss_sigma=50_epocs=500_high_frequency_energy_weight=1/2022-03-12_12-21-46/g_tnrd_e500.pt"
 
 
 #w1=torch.load('/home/itayh/Tec/xUnit/denoising/weight_rand_init.pt')
@@ -46,9 +46,9 @@ plt.show()
 
 
 
-p=np.zeros((5,5))
-for ind1 in range(5):
-    for ind2 in range(5):
-        p[ind1,ind2]=ind1**2+ind2**2
-p=p/np.linalg.norm(p)
-plt.figure(); plt.imshow(p); plt.show()
+# p=np.zeros((5,5))
+# for ind1 in range(5):
+#     for ind2 in range(5):
+#         p[ind1,ind2]=ind1**2+ind2**2
+# p=p/np.linalg.norm(p)
+# plt.figure(); plt.imshow(p); plt.show()

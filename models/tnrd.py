@@ -9,7 +9,7 @@ import numpy as np
 import math
 
 _NRBF=63 
-_DCT=True
+#_DCT=True
 _TIE = False
 _BETA = False 
 _C1x1 = False
@@ -38,7 +38,7 @@ __all__ = ['g_tnrd','d_tnrd','TNRDlayer']
 #                 nn.init.constant_(m.bias.data, 0.0)
 #
 
-def init_model_param(model,num_reb_kernels=63,filter_size=5,stage=8,init_weight_dct=_DCT):
+def init_model_param(model,num_reb_kernels=63,filter_size=5,stage=8,init_weight_dct=True):
     w0 = np.load('w0_orig.npy')
     w0 = np.histogram(np.random.randn(1000)*0.02,num_reb_kernels-1)[1] if _NRBF != 63 else w0
     #
@@ -113,6 +113,8 @@ class TNRDlayer(nn.Module):
 
         self.args = args
 
+        self.use_dct = (not self.args.dont_use_dct)
+
         self.in_channels = in_channels
         self.stride=stride
         self.groups=groups
@@ -121,14 +123,11 @@ class TNRDlayer(nn.Module):
         self.stride=stride
         self.dilation=dilation
         self.kernel_size=kernel_size
-        if self.args.use_dct_drop_out:
-            self.act = RBF(_NRBF, self.in_channels-1, gaussian)
-        else:
-            self.act = RBF(_NRBF,self.in_channels,gaussian)
+        self.act = RBF(_NRBF,self.in_channels,gaussian)
         self.alpha=nn.Parameter(torch.Tensor([0.9]))
         self.beta=nn.Parameter(torch.zeros([1,self.in_channels,1,1]))
-        if _DCT:
-        #if self.args.use_dct:
+        #if _DCT:
+        if self.use_dct:
             self.weight = nn.Parameter(torch.zeros([in_channels,in_channels]))
         else:
             self.weight = nn.Parameter(torch.zeros([in_channels,1,kernel_size,kernel_size]))    
@@ -150,55 +149,39 @@ class TNRDlayer(nn.Module):
         self.counter+=1
         u,f=input
         for it in range(1):
-
-            use_drop_out =  self.args.use_dct_drop_out
-
             # chen: u shape: [2, 1, 100 ,100]
             up = self.pad_input(u)
             # chen: up shape: [2, 1, 124, 124]
 
-            if use_drop_out:
-                ur = up.repeat(1, self.in_channels -1, 1, 1)
-            else:
-                ur = up.repeat(1,self.in_channels,1,1)
+
+            ur = up.repeat(1,self.in_channels,1,1)
             # chen: ur shape: [2, 24, 124, 124]
 
             #import pdb; pdb.set_trace()
 
+            if self.use_dct:
 
-
-            if _DCT:
-            #if self.args.use_dct:
-
-                original_code = True
+                original_code = False
                 if original_code:
                     K=self.weight.matmul(self.dct_filters)  # chen: self.weights shape [24, 24] ||self.dct_filters shape: [24, 25]
                     # chen: K shape [24,25]
 
                     # torch.norm(K,dim=1,keepdim=True) -> shape: [24,1] (norm of each wieghts*k)
-                    #original:
+                    # original:
                     K = K.div(torch.norm(K,dim=1,keepdim=True)+2.2e-16).view(self.kernel_size**2-1,1,self.kernel_size,self.kernel_size)
                     # chen: K shape [24, 1, 5, 5]
                 else:
-                    # changed - remove the normalization
+                    # changed -  weights normalization only
                     K = self.weight.matmul(self.dct_filters)
                     K = K.div(torch.norm(self.weight,dim=1,keepdim=True)+2.2e-16)
                     K = K.view(self.kernel_size**2-1,1,self.kernel_size,self.kernel_size)
 
-                if use_drop_out:
-                    # move each row with probability P=1/24
-                    dct_filter_index_to_drop = torch.randint(0, 23, (1,))[0].numpy()
-                    K = torch.cat((K[:dct_filter_index_to_drop], K[dct_filter_index_to_drop + 1:]))
-
             else:
                 K = self.weight
 
-            if use_drop_out:
-                output1 = F.conv2d(ur, K, None, self.stride, self.padding, self.dilation, self.groups-1)
-                # chen: output shape [2,23,120,120]
-            else:
-                output1 = F.conv2d(ur, K, None, self.stride, self.padding, self.dilation, self.groups)
-                # chen: output1 shape [2, 24, 120, 120]
+
+            output1 = F.conv2d(ur, K, None, self.stride, self.padding, self.dilation, self.groups)
+            # chen: output1 shape [2, 24, 120, 120]
 
             output,_ = self.act(output1)
 
@@ -223,12 +206,9 @@ class TNRDlayer(nn.Module):
             if _C1x1:
                 output = F.conv2d(output, self.weight_1x1, None, self.stride, self.padding, self.dilation)
 
-            if use_drop_out:
-                output = F.conv2d(output, weight_rot180, None, self.stride, self.padding, self.dilation, self.groups-1)
-                # chen: output shape: [2, 23, 116, 116]
-            else:
-                output = F.conv2d(output, weight_rot180, None, self.stride, self.padding, self.dilation, self.groups)
-                # chen: output shape: [2, 24, 116, 116]
+
+            output = F.conv2d(output, weight_rot180, None, self.stride, self.padding, self.dilation, self.groups)
+            # chen: output shape: [2, 24, 116, 116]
 
             output = F.pad(output,(-8,-8,-8,-8))
             # chen: output shape: [2, 24, 100, 100]
@@ -238,8 +218,27 @@ class TNRDlayer(nn.Module):
 
             beta = self.beta if _BETA else 1
 
+
+            if self.args.use_dct_drop_out:
+                dct_filter_index_to_drop = int(torch.randint(0, 23, (1,))[0].numpy())
+                output = torch.cat((output[:,:dct_filter_index_to_drop,:,:], output[:,dct_filter_index_to_drop + 1:,:,:]), dim=1)
+
             u = u-output.mul(beta).sum(1,keepdim=True)-self.alpha.exp()*(u-f)
             # chen: u shape: [2, 1, 100, 100]
+
+            # ## test -show image
+            # import matplotlib.pyplot as plt
+            # import numpy
+            # import copy
+            # # img_tensor = (copy.copy(u[0][0])).cpu().detach()
+            # img_tensor = (copy.copy(output1[0][0])).cpu().detach()
+            # img = img_tensor.numpy()
+            # orig_img = (copy.copy(f[0][0])).cpu().detach().numpy()
+            # fig, axs = plt.subplots(2)
+            # axs[0].imshow(img, cmap='gray')
+            # axs[1].imshow(orig_img, cmap='gray')
+            # plt.show()
+
         return u,f
 
 # class GenBlock(nn.Module):
@@ -307,6 +306,8 @@ class Generator(nn.Module):
 
         self.args = all_args
 
+        use_dct = (not self.args.dont_use_dct)
+
         filter_size=5
         # image to features
         in_channels=(filter_size**2-1)
@@ -327,7 +328,7 @@ class Generator(nn.Module):
         self.features_to_image = TNRDlayer(in_channels=in_channels, out_channels=in_channels, kernel_size=5,groups=in_channels, args=self.args)
         #initialize_weights([self.features_to_image], 0.02)
         self.counter=0
-        init_model_param(self,num_reb_kernels=_NRBF,filter_size=5,stage=gen_blocks+2)
+        init_model_param(self,num_reb_kernels=_NRBF,filter_size=5,stage=gen_blocks+2, init_weight_dct=use_dct)
 
     def forward(self, x):
         

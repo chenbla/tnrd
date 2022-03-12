@@ -107,7 +107,7 @@ class Trainer():
 
     def _init_optim(self):
         # initialize optimizer
-        self.g_optimizer = torch.optim.Adam(self.g_model.parameters(), lr=self.args.lr, betas=self.args.gen_betas)
+        self.g_optimizer = torch.optim.Adam(self.g_model.parameters(), lr=self.args.lr, betas=self.args.gen_betas, weight_decay=self.args.dct_weight_decay)
         #self.g_optimizer = torch.optim.SGD(self.g_model.parameters(), lr=self.args.lr,momentum=0.9)
 
         # initialize scheduler
