@@ -23,7 +23,7 @@ for sigma in sigma_sizes:
     for train_size in train_sizes:
         high_frequency_energy_weight = 0
         use_greedy_training = False
-        sigma = 50
+        #sigma = 50
         epocs = 500
         lr = 1e-3
         train_max_size = train_size
@@ -49,7 +49,7 @@ for sigma in sigma_sizes:
     for train_size in train_sizes:
         high_frequency_energy_weight=1
         use_greedy_training = False
-        sigma = 50
+        #sigma = 50
         epocs = 500
         lr = 1e-3
         train_max_size = train_size
