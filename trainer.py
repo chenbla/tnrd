@@ -82,6 +82,8 @@ class Trainer():
         else:
             model_config = {}
 
+        model_config['all_args']=self.args
+
         g_model = models.__dict__[self.args.g_model]
         self.g_model = g_model(**model_config)
 
@@ -121,11 +123,10 @@ class Trainer():
         if self.args.range_weight > 0.:
             self.range = RangeLoss(invalidity_margins=self.invalidity_margins).to(self.args.device)
 
-
     def _init(self):
         # init parameters
         self.steps = 0
-        self.losses = {'D': [], 'D_r': [], 'D_gp': [], 'D_f': [], 'G': [], 'G_recon': [], 'G_rng': [], 'G_perc': [], 'G_txt': [], 'G_adv': [], 'psnr': [], 'best_model_psnr': [], 'tnrd_loss': []}
+        self.losses = {'D': [], 'D_r': [], 'D_gp': [], 'D_f': [], 'G': [], 'G_recon': [], 'G_rng': [], 'G_perc': [], 'G_txt': [], 'G_adv': [], 'psnr': [], 'best_model_psnr': [], 'tnrd_loss': [], 'high_freq_loss': []}
 
         # initialize model
         self._init_model()
@@ -329,11 +330,58 @@ class Trainer():
         #     loss += loss_txt * self.args.textural_weight
         #     self.losses['G_txt'].append(loss_txt.data.item())
 
-        self.losses['tnrd_loss'].append(self.tnrd_loss(inputs).item())
+        #self.losses['tnrd_loss'].append(self.tnrd_loss(inputs).item())
 
         # chen - i removed it
         #if self.args.tnrd_energy_weight > 0.:
         #    loss+=self.args.tnrd_energy_weight*self.tnrd_loss(inputs)
+
+
+        # high freq regularization
+        if self.args.high_frequency_energy_weight > 0.:
+            dct_penalty_matrix = np.zeros((5, 5))
+            for ind1 in range(5):
+                for ind2 in range(5):
+                    dct_penalty_matrix[ind1, ind2] = ind1 ** 2 + ind2 ** 2
+            dct_penalty_matrix = dct_penalty_matrix / np.linalg.norm(dct_penalty_matrix)
+
+            dct_penalty_matrix = torch.tensor(dct_penalty_matrix).to(self.device)
+            final_dct_penalty_matrix = torch.diag(dct_penalty_matrix.flatten().float()[1:])
+
+            #test:
+            # t = torch.ones(24, 24).to(self.device)
+            # res = t @ final_dct_penalty_matrix
+
+            high_freq_loss = torch.tensor(0., requires_grad=True)
+            for name, param in self.g_model.features_to_image.named_parameters():
+                if 'weight' == name:
+                    high_freq_loss = high_freq_loss + torch.norm(param @ final_dct_penalty_matrix)
+            for name, param in self.g_model.image_to_features.named_parameters():
+                if 'weight' == name:
+                    high_freq_loss = high_freq_loss + torch.norm(param @ final_dct_penalty_matrix)
+            for name, param in self.g_model.features.named_parameters():
+                if ('weight' in name) and ('act' not in name):
+                    high_freq_loss = high_freq_loss + torch.norm(param @ final_dct_penalty_matrix)
+
+            self.losses['high_freq_loss'].append(high_freq_loss)
+
+            #print("loss{}, high frequency loss: {}".format(loss, high_freq_loss))
+            loss = loss + self.args.high_frequency_energy_weight * high_freq_loss
+
+        ##
+        # l1 regularization
+        # L1_reg = torch.tensor(0., requires_grad=True)
+        # for name, param in self.g_model.features_to_image.named_parameters():
+        #     #print(name)
+        #     if 'weight' == name:
+        #         L1_reg = L1_reg + torch.norm(param, 1)
+        #         print("loss{}, L1_reg: {}".format(loss, L1_reg))
+        # loss +=0.01*L1_reg
+
+
+        ######################################
+
+
 
         # chen: greedy - 1/3 of the epocs
         if self.args.use_greedy_training:
@@ -398,8 +446,11 @@ class Trainer():
                     line2print += ', G_txt: {:.8f}'.format(self.losses['G_txt'][-1])
                 if self.args.adversarial_weight:
                     line2print += ', G_adv: {:.6f},'.format(self.losses['G_adv'][-1])
-                if True:
-                    line2print += ', tnrd_loss: {:.6f},'.format(self.losses['tnrd_loss'][-1])    
+                #if True:
+                #    line2print += ', tnrd_loss: {:.6f},'.format(self.losses['tnrd_loss'][-1])
+
+                if self.args.high_frequency_energy_weight:
+                    line2print += ', high_freq_loss: {:.6f},'.format(self.losses['high_freq_loss'][-1])
             logging.info(line2print)
 
         # plots for tensorboard

@@ -55,6 +55,11 @@ def get_arguments():
 
     parser.add_argument('--train_max_size', default=999999, type=int, help='limit the traint set')
     parser.add_argument('--use_greedy_training', default=False, action='store_true', help='use greedy training (default: false)')
+    parser.add_argument('--high_frequency_energy_weight', default=0.0, type=float, help='high_frequency-energy-weight (default: 0.0)')
+    parser.add_argument('--use_dct_drop_out', default=False, action='store_true')
+    parser.add_argument('--dont_use_dct', default=False, action='store_false')
+
+
     args = parser.parse_args()
 
     time_stamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')

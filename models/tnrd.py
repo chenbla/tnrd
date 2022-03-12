@@ -9,7 +9,7 @@ import numpy as np
 import math
 
 _NRBF=63 
-_DCT=True#False
+_DCT=True
 _TIE = False
 _BETA = False 
 _C1x1 = False
@@ -107,9 +107,12 @@ class TNRDConv2d(nn.Conv2d):
 class TNRDlayer(nn.Module):
     """docstring for TNRDConv2d."""
 
-    def __init__(self, in_channels, out_channels, kernel_size=5,
+    def __init__(self, in_channels, out_channels, args, kernel_size=5,
                  stride=1, padding=0, dilation=1, groups=1, bias=True):
         super(TNRDlayer, self).__init__()
+
+        self.args = args
+
         self.in_channels = in_channels
         self.stride=stride
         self.groups=groups
@@ -118,10 +121,14 @@ class TNRDlayer(nn.Module):
         self.stride=stride
         self.dilation=dilation
         self.kernel_size=kernel_size
-        self.act = RBF(_NRBF,self.in_channels,gaussian)
+        if self.args.use_dct_drop_out:
+            self.act = RBF(_NRBF, self.in_channels-1, gaussian)
+        else:
+            self.act = RBF(_NRBF,self.in_channels,gaussian)
         self.alpha=nn.Parameter(torch.Tensor([0.9]))
         self.beta=nn.Parameter(torch.zeros([1,self.in_channels,1,1]))
         if _DCT:
+        #if self.args.use_dct:
             self.weight = nn.Parameter(torch.zeros([in_channels,in_channels]))
         else:
             self.weight = nn.Parameter(torch.zeros([in_channels,1,kernel_size,kernel_size]))    
@@ -129,6 +136,8 @@ class TNRDlayer(nn.Module):
                 self.weight2 = nn.Parameter(torch.zeros([in_channels,1,kernel_size,kernel_size]))  
         if _C1x1:
             self.weight_1x1=nn.Parameter(torch.zeros([in_channels,in_channels,1,1]))  
+
+        # self.weight_vec = nn.Parameter(torch.ones([in_channels, 1]))
 
         #initialize_weights_dct([self], 0.02)
         self.register_buffer('dct_filters',torch.tensor(gen_dct2(kernel_size)[1:,:]).float())
@@ -141,31 +150,55 @@ class TNRDlayer(nn.Module):
         self.counter+=1
         u,f=input
         for it in range(1):
+
+            use_drop_out =  self.args.use_dct_drop_out
+
             # chen: u shape: [2, 1, 100 ,100]
             up = self.pad_input(u)
             # chen: up shape: [2, 1, 124, 124]
-            ur = up.repeat(1,self.in_channels,1,1)
+
+            if use_drop_out:
+                ur = up.repeat(1, self.in_channels -1, 1, 1)
+            else:
+                ur = up.repeat(1,self.in_channels,1,1)
             # chen: ur shape: [2, 24, 124, 124]
 
             #import pdb; pdb.set_trace()
+
+
+
             if _DCT:
-                K=self.weight.matmul(self.dct_filters)  # chen: self.weights shape [24, 24] ||self.dct_filters shape: [24, 25]
-                # chen: K shape [24,25]
+            #if self.args.use_dct:
 
-                # torch.norm(K,dim=1,keepdim=True) -> shape: [24,1] (norm of each wieghts*k)
-                #original:
-                #K = K.div(torch.norm(K,dim=1,keepdim=True)+2.2e-16).view(self.kernel_size**2-1,1,self.kernel_size,self.kernel_size)
-                # chen: K shape [24, 1, 5, 5]
+                original_code = True
+                if original_code:
+                    K=self.weight.matmul(self.dct_filters)  # chen: self.weights shape [24, 24] ||self.dct_filters shape: [24, 25]
+                    # chen: K shape [24,25]
 
-                # changed - remove the normalization
-                K = K.view(self.kernel_size**2-1,1,self.kernel_size,self.kernel_size)
+                    # torch.norm(K,dim=1,keepdim=True) -> shape: [24,1] (norm of each wieghts*k)
+                    #original:
+                    K = K.div(torch.norm(K,dim=1,keepdim=True)+2.2e-16).view(self.kernel_size**2-1,1,self.kernel_size,self.kernel_size)
+                    # chen: K shape [24, 1, 5, 5]
+                else:
+                    # changed - remove the normalization
+                    K = self.weight.matmul(self.dct_filters)
+                    K = K.div(torch.norm(self.weight,dim=1,keepdim=True)+2.2e-16)
+                    K = K.view(self.kernel_size**2-1,1,self.kernel_size,self.kernel_size)
+
+                if use_drop_out:
+                    # move each row with probability P=1/24
+                    dct_filter_index_to_drop = torch.randint(0, 23, (1,))[0].numpy()
+                    K = torch.cat((K[:dct_filter_index_to_drop], K[dct_filter_index_to_drop + 1:]))
 
             else:
                 K = self.weight
 
-            output1 = F.conv2d(ur, K, None, self.stride, self.padding, self.dilation, self.groups)
-
-            # chen: output1 shape [2, 24, 120, 120]
+            if use_drop_out:
+                output1 = F.conv2d(ur, K, None, self.stride, self.padding, self.dilation, self.groups-1)
+                # chen: output shape [2,23,120,120]
+            else:
+                output1 = F.conv2d(ur, K, None, self.stride, self.padding, self.dilation, self.groups)
+                # chen: output1 shape [2, 24, 120, 120]
 
             output,_ = self.act(output1)
 
@@ -189,21 +222,24 @@ class TNRDlayer(nn.Module):
 
             if _C1x1:
                 output = F.conv2d(output, self.weight_1x1, None, self.stride, self.padding, self.dilation)
-            output = F.conv2d(output, weight_rot180, None, self.stride, self.padding, self.dilation, self.groups)
-            # chen: output shape: [2, 24, 116, 116]
+
+            if use_drop_out:
+                output = F.conv2d(output, weight_rot180, None, self.stride, self.padding, self.dilation, self.groups-1)
+                # chen: output shape: [2, 23, 116, 116]
+            else:
+                output = F.conv2d(output, weight_rot180, None, self.stride, self.padding, self.dilation, self.groups)
+                # chen: output shape: [2, 24, 116, 116]
+
             output = F.pad(output,(-8,-8,-8,-8))
             # chen: output shape: [2, 24, 100, 100]
-            #
-            if self.counter%500==0:
-                print(self.alpha,self.beta.max(),self.beta.min(),self.act.weight.max(),self.act.weight.min(),output.sum(1,keepdim=True).max())
+
+            # if self.counter%500==0:
+            #     print(self.alpha,self.beta.max(),self.beta.min(),self.act.weight.max(),self.act.weight.min(),output.sum(1,keepdim=True).max())
+
             beta = self.beta if _BETA else 1
 
-            # chen change:
             u = u-output.mul(beta).sum(1,keepdim=True)-self.alpha.exp()*(u-f)
             # chen: u shape: [2, 1, 100, 100]
-
-            # original:
-            # u = u - output.mul(beta).sum(1, keepdim=True) - self.alpha.exp() * (u - f)
         return u,f
 
 # class GenBlock(nn.Module):
@@ -266,18 +302,21 @@ class TNRDlayer(nn.Module):
 #         return x[0]
 
 class Generator(nn.Module):
-    def __init__(self, in_channels, num_features, gen_blocks, dis_blocks):
+    def __init__(self, in_channels, num_features, gen_blocks, dis_blocks, all_args):
         super(Generator, self).__init__()
+
+        self.args = all_args
+
         filter_size=5
         # image to features
         in_channels=(filter_size**2-1)
         
         #self.crop_output=torchvision.transforms.CenterCrop(50)
-        self.image_to_features = TNRDlayer(in_channels=in_channels, out_channels=in_channels,groups=in_channels)
+        self.image_to_features = TNRDlayer(in_channels=in_channels, out_channels=in_channels,groups=in_channels, args=self.args)
         # features
         blocks = []
         for _ in range(gen_blocks):
-            blocks.append(TNRDlayer(in_channels=in_channels, out_channels=in_channels, bias=False,groups=in_channels))
+            blocks.append(TNRDlayer(in_channels=in_channels, out_channels=in_channels, bias=False,groups=in_channels, args=self.args))
         self.features = nn.Sequential(*blocks)
         
         #self.features = []
@@ -285,7 +324,7 @@ class Generator(nn.Module):
         #    self.features.append(TNRDlayer(in_channels=in_channels, out_channels=in_channels, bias=False,groups=in_channels))
         
         # features to image
-        self.features_to_image = TNRDlayer(in_channels=in_channels, out_channels=in_channels, kernel_size=5,groups=in_channels)
+        self.features_to_image = TNRDlayer(in_channels=in_channels, out_channels=in_channels, kernel_size=5,groups=in_channels, args=self.args)
         #initialize_weights([self.features_to_image], 0.02)
         self.counter=0
         init_model_param(self,num_reb_kernels=_NRBF,filter_size=5,stage=gen_blocks+2)
