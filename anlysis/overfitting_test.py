@@ -51,7 +51,7 @@ for curr_label in output_dirs_dict.keys():
     color_index += 1
 
 plt.legend(loc="lower right")
-plt.legend(labels)
+#plt.legend(labels)
 plt.xlabel('Number of training samples')
 plt.ylabel('Test PSNR(dB)')
 plt.title("Training process optimization - avoid overfitting")
