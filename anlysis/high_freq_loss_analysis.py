@@ -61,7 +61,7 @@ def show_avg_weights(weights_from_torch):
     plt.show()
 
 
-def cmp_avg_weights(weights_from_torch_with_reg, weights_from_torch_without_reg):
+def cmp_avg_weights_matricies(weights_from_torch_with_reg, weights_from_torch_without_reg):
     weights_matrix_with_reg = calc_weights_sum(weights_from_torch_with_reg, normalize=True)
     weights_matrix_without_reg = calc_weights_sum(weights_from_torch_without_reg, normalize=True)
 
@@ -89,7 +89,7 @@ def cmp_avg_weights(weights_from_torch_with_reg, weights_from_torch_without_reg)
 
     axs[2].matshow(diff, cmap=plt.cm.Blues)
     axs[2].axis('off')
-    axs[2].set_title('with regularization - without regularization')
+    axs[2].set_title('diff = (with regularization - without regularization)')
     for i in range(diff.shape[0]):
         for j in range(diff.shape[1]):
             c = diff[j, i]
@@ -98,8 +98,62 @@ def cmp_avg_weights(weights_from_torch_with_reg, weights_from_torch_without_reg)
     plt.show()
 
 
-weights_with_regularization_path = "C:/project/denoising_my/results/results_automation__high_freq_regularization_partial/output_dir_75_samples_hish-frequency-loss_sigma=50_epocs=500_high_frequency_energy_weight=1/2022-03-12_12-21-46/g_tnrd_e500.pt"
-weights_without_regularization_path = "C:/project/denoising_my/results/results_automation__high_freq_regularization_partial/output_dir_75_samples_original_sigma=50_epocs=500/2022-03-12_01-50-59/g_tnrd_e500.pt"
+def convert_matrix_to_frquency(matrix):
+    len = matrix.shape[0]
+    print(range())
+    frquency_vec = [1, 2, 3]
+    frquency_from_matrix = [2, 4, 8]
+    return [frquency_vec, frquency_from_matrix]
+
+def cmp_avg_weights_graphs(weights_from_torch_with_reg, weights_from_torch_without_reg):
+    weights_matrix_with_reg = calc_weights_sum(weights_from_torch_with_reg, normalize=True)
+    weights_matrix_without_reg = calc_weights_sum(weights_from_torch_without_reg, normalize=True)
+
+    diff = weights_matrix_with_reg - weights_matrix_without_reg
+
+    loss_without_reg = calc_loss(weights_from_torch_without_reg, normalize=True)
+    loss_with_reg = calc_loss(weights_from_torch_with_reg, normalize=True)
+
+    frquency_vec, frquency_from_matrix = convert_matrix_to_frquency(weights_matrix_with_reg)
+    print(frquency_vec)
+    print(frquency_from_matrix)
+
+    # fig, axs = plt.subplots(1, 3)
+    # axs[0].matshow(weights_matrix_with_reg, cmap=plt.cm.Blues)
+    # axs[0].axis('off')
+    # axs[0].set_title('with regularization \n frequency loss ={:.2f}'.format(loss_with_reg))
+    # for i in range(weights_matrix_with_reg.shape[0]):
+    #     for j in range(weights_matrix_with_reg.shape[1]):
+    #         c = weights_matrix_with_reg[j, i]
+    #         axs[0].text(i, j, "{:.2f}".format(c), va='center', ha='center')
+    #
+    # axs[1].matshow(weights_matrix_without_reg, cmap=plt.cm.Blues)
+    # axs[1].axis('off')
+    # axs[1].set_title('without regularization \n frequency loss ={:.2f}'.format(loss_without_reg))
+    # for i in range(weights_matrix_without_reg.shape[0]):
+    #     for j in range(weights_matrix_without_reg.shape[1]):
+    #         c = weights_matrix_without_reg[j, i]
+    #         axs[1].text(i, j, "{:.2f}".format(c), va='center', ha='center')
+    #
+    # axs[2].matshow(diff, cmap=plt.cm.Blues)
+    # axs[2].axis('off')
+    # axs[2].set_title('diff = (with regularization - without regularization)')
+    # for i in range(diff.shape[0]):
+    #     for j in range(diff.shape[1]):
+    #         c = diff[j, i]
+    #         axs[2].text(i, j, "{:.2f}".format(c), va='center', ha='center')
+    #
+    # plt.show()
+
+#std 50
+weights_with_regularization_path = "../results/results_automation/output_dir_400_samples_high-frequency-loss_sigma=50_epocs=700_high_frequency_energy_weight=1/2022-03-18_04-47-44/g_tnrd_e700.pt"
+weights_without_regularization_path = "../results/results_automation/output_dir_400_samples_original_sigma=50_epocs=700/2022-03-17_19-50-17/g_tnrd_e700.pt"
+
+#std 25
+# base_dir = "/home/chenkatz@staff.technion.ac.il/tnrd/"
+# weights_with_regularization_path = base_dir + "/results/results_automation/output_dir_400_samples_high-frequency-loss_sigma=25_epocs=700_high_frequency_energy_weight=1/2022-03-18_09-03-27/g_tnrd_e500.pt"
+# weights_without_regularization_path = base_dir + "/results/results_automation/output_dir_400_samples_original_sigma=25_epocs=700/2022-03-17_21-31-13/g_tnrd_e700.pt"
+
 
 # weights_with_regularization_path = "C:/project/denoising_my/results/2022-03-12_19-01-56_agressive_high_freq_loss/g_tnrd_e30.pt"
 
@@ -108,7 +162,9 @@ weights_with_reg = torch.load(weights_with_regularization_path)
 
 # show_all_weights(weights_with_reg)
 # show_avg_weights(weights_with_reg)
-cmp_avg_weights(weights_with_reg, weights_without_reg)
+# cmp_avg_weights_matricies(weights_with_reg, weights_without_reg)
+
+cmp_avg_weights_graphs(weights_with_reg, weights_without_reg)
 
 # loss_without_reg = calc_loss(weights_without_reg, normalize=True)
 # loss_with_reg = calc_loss(weights_with_reg, normalize=True)
