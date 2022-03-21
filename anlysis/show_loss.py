@@ -9,7 +9,7 @@ output_dir_greedy = "C:/project/denoising_my/results/results_automation/output_d
 # output_dir_l2_regularization_no_greedy = "results/2022-03-04_19-18-26_-_3000_epocs/"
 # output_dir_DCT_regularization = "results/2022-03-04_19-18-26_-_3000_epocs/"
 
-output_dir_greedy = "C:/project/denoising_my/results/results_automation__high_freq_regularization_partial/output_dir_400_samples_original_sigma=50_epocs=500/2022-03-12_08-00-51/"
+output_dir_greedy = "/home/chenkatz@staff.technion.ac.il/tnrd/results/results_automation/output_dir_400_samples_high-frequency-loss_sigma=25_epocs=700_high_frequency_energy_weight=1/2022-03-18_09-03-27/"
 
 
 loss_vec = get_loss_vec(output_dir_greedy)

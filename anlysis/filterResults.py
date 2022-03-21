@@ -6,11 +6,12 @@ import glob
 import shutil
 
 epocs = 700
-outputs_dir_main_folder = "../results/results_automation/"
+base_result_dir= "/home1/chenkatz@staff.technion.ac.il/tnrd/tnrd/results/" #"../results/"
+outputs_dir_main_folder = os.path.join(base_result_dir, "results_automation/")#"../results/results_automation/"
 
-outputs_dir_minimal = os.path.join("../results/results_automation_minimal/")
+outputs_dir_minimal = os.path.join(base_result_dir, "results_automation_minimal/")
 print(outputs_dir_minimal)
-os.makedirs(outputs_dir_minimal, exist_ok=True)
+# os.makedirs(outputs_dir_minimal, exist_ok=True)
 
 output_dirs_list=[]
 # output dir includes folder with name format "output_dir_400_samples_<label>"
@@ -75,7 +76,7 @@ for curr_label in output_dirs_dict.keys():
                         dst = os.path.join(output_dir_minimal, file)
                         if not os.path.exists(dst):
                             shutil.copy(src, dst)
-
+        #
         shutil.copy(os.path.join(output_dir, "log.txt"), os.path.join(output_dir_minimal, "log.txt"))
 
 

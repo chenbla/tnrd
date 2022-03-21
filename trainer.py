@@ -43,6 +43,12 @@ _EImage = -1
 #         grad_input = grad_output
 #         return grad_input,None
 
+# from piqa import SSIM #ERROR: torchaudio 0.8.1 has requirement torch==1.8.1, but you'll have torch 1.11.0 which is incompatible.
+#
+# class SSIMLoss(SSIM):
+#     def forward(self, x, y):
+#         return 1. - super().forward(x, y)
+
 class L2Loss_image(torch.nn.Module):
     """docstring for L2Loss_image."""
 
@@ -123,10 +129,13 @@ class Trainer():
         if self.args.range_weight > 0.:
             self.range = RangeLoss(invalidity_margins=self.invalidity_margins).to(self.args.device)
 
+        if self.args.ssim_reconstruction_weight:
+            self.reconstruction = L2Loss_image().to(self.device)
+
     def _init(self):
         # init parameters
         self.steps = 0
-        self.losses = {'D': [], 'D_r': [], 'D_gp': [], 'D_f': [], 'G': [], 'G_recon': [], 'G_rng': [], 'G_perc': [], 'G_txt': [], 'G_adv': [], 'psnr': [], 'best_model_psnr': [], 'tnrd_loss': [], 'high_freq_loss': []}
+        self.losses = {'D': [], 'D_r': [], 'D_gp': [], 'D_f': [], 'G': [], 'G_recon': [], 'G_rng': [], 'G_perc': [], 'G_txt': [], 'G_adv': [], 'psnr': [], 'best_model_psnr': [], 'tnrd_loss': [], 'high_freq_loss': [], 'psnr_train': []}
 
         # initialize model
         self._init_model()
@@ -388,10 +397,13 @@ class Trainer():
             if self.steps<0.3*self.args.epochs * self.args.train_max_size: #2e4:
                loss += self.greedy_loss(targets)
 
-        add_dct_high_freq_regularization = True
-        if add_dct_high_freq_regularization:
-            pass
-
+        # ssim reconstruction loss
+        # if self.args.ssim_reconstruction_weight > 0.:
+        #     # https://stackoverflow.com/questions/53956932/use-pytorch-ssim-loss-function-in-my-model
+        #     # maximize the ssim loss -> minimize the ssim loss
+        #     loss_ssim_recon = self.reconstruction(generated_data, targets)
+        #     loss += loss_ssim_recon * self.args.ssim_reconstruction_weight
+        #     self.losses['ssim_recon'].append(loss_ssim_recon.data.item())
 
         #if len(self.losses['G_recon'])>1 and self.losses['G_recon'][-1]< min(self.losses['G_recon'][:-1]):
         #    print('new best G_recon model: ', self.losses['G_recon'][-1])
@@ -476,7 +488,7 @@ class Trainer():
         with torch.no_grad():
             outputs = self.g_model(inputs) 
         # if ii==_EImage:  # chen: i remove it!
-        if True: #chen: i added it
+        if False: #chen: i added it
             image = Image.fromarray(inputs.squeeze().squeeze().clamp(0,255).round().cpu().numpy().astype(np.uint8))
             image.save('noisy_%s.png'%(self.args.noise_sigma))            
             image = Image.fromarray(outputs.squeeze().squeeze().clamp(0,255).round().cpu().numpy().astype(np.uint8))
@@ -484,7 +496,7 @@ class Trainer():
             image = Image.fromarray(targets.squeeze().squeeze().clamp(0,255).round().cpu().numpy().astype(np.uint8))
             image.save('target_%s.png'%(self.args.noise_sigma))        
         # save image and compute psnr
-        self._save_image(outputs, paths[0], epoch + 1)
+        # self._save_image(outputs, paths[0], epoch + 1)
         psnr = compute_psnr(outputs, targets)
 
         return psnr
@@ -498,26 +510,29 @@ class Trainer():
         for _, data in enumerate(loader):
             self._train_iteration(data)
 
-    def _eval_epoch(self, loader, epoch):
+    def _eval_epoch(self, loader, epoch, loader_train=None):
         #sd_model = copy.deepcopy(self.g_model.state_dict())
         self.g_model.eval()
         psnrs = []
-        psnrs_best = []
         # eval over epoch
         for ii, data in enumerate(loader):
             psnr = self._eval_iteration(data, epoch,ii)
             psnrs.append(psnr)
-        
-        #self.g_model.load_state_dict(torch.load('best_g_model.pth'))
-        #for _, data in enumerate(loader):
-        #    psnr = self._eval_iteration(data, epoch)
-        #    psnrs_best.append(psnr)
-#
-        #self.g_model.load_state_dict(sd_model)
         # record psnr
         self.losses['psnr'].append(average(psnrs))
-        #self.losses['best_model_psnr'].append(average(psnrs_best))
-        logging.info('Evaluation: {:.3f}'.format(self.losses['psnr'][-1]))
+
+        psnrs_train = []
+        if loader_train is not None:
+            for ii, data in enumerate(loader_train):
+                psnr = self._eval_iteration(data, epoch, ii)
+                psnrs_train.append(psnr)
+            # record psnr
+            self.losses['psnr_train'].append(average(psnrs_train))
+
+        if loader_train is None:
+            logging.info('Evaluation: {:.3f}'.format(self.losses['psnr'][-1]))
+        else:
+            logging.info("Evaluation: {:.3f},      Train-evaluation: {:.3f}".format(self.losses['psnr'][-1], self.losses['psnr_train'][-1]))
         if self.args.use_tb:
             self.tb.add_scalar('data/psnr', self.losses['psnr'][-1], epoch)
 
@@ -544,7 +559,7 @@ class Trainer():
 
             # evaluation
             if ((epoch + 1) % self.args.eval_every == 0) or ((epoch + 1) == self.args.epochs):
-                self._eval_epoch(loaders['eval'], epoch)
+                self._eval_epoch(loaders['eval'], epoch, loaders['train_eval'])
                 self._save_model(epoch)
 
         # best score
