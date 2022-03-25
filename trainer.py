@@ -12,7 +12,7 @@ from utils.recorderx import RecoderX
 from utils.misc import save_image, average, mkdir, compute_psnr
 from models.modules.losses import RangeLoss, PerceptualLoss, TexturalLoss
 from functools import partial
-from models.tnrd import TNRDConv2d,TNRDlayer
+from models.tnrd import TNRDConv2d, TNRDlayer
 from models.modules.activations import RBF
 import torchvision
 import copy
@@ -22,6 +22,7 @@ from PIL import Image
 import numpy as np
 
 _EImage = -1
+
 
 # class Round(InplaceFunction):
 #
@@ -55,16 +56,19 @@ class L2Loss_image(torch.nn.Module):
     def __init__(self):
         super(L2Loss_image, self).__init__()
         # self.stochastic = False
-    def forward(self,x,y):
+
+    def forward(self, x, y):
         # if self.stochastic:
         #     noise = x.new(x.shape).uniform_(-0.5, 0.5)
         #     x.add_(noise)
-        return l2_loss_image(x,y)
+        return l2_loss_image(x, y)
 
-def l2_loss_image(x,y):
+
+def l2_loss_image(x, y):
     x = x.clamp(0, 255)
     y = y.clamp(0, 255)
-    return (x-y).pow(2).mean()
+    return (x - y).pow(2).mean()
+
 
 class Trainer():
     def __init__(self, args):
@@ -74,7 +78,7 @@ class Trainer():
         self.session = 0
         self.print_model = True
         self.invalidity_margins = None
-        
+
         if self.args.use_tb:
             self.tb = RecoderX(log_dir=args.save_path)
 
@@ -88,7 +92,7 @@ class Trainer():
         else:
             model_config = {}
 
-        model_config['all_args']=self.args
+        model_config['all_args'] = self.args
 
         g_model = models.__dict__[self.args.g_model]
         self.g_model = g_model(**model_config)
@@ -108,34 +112,41 @@ class Trainer():
         # print model
         if self.print_model:
             logging.info(self.g_model)
-            logging.info('Number of parameters in generator: {}\n'.format(sum([l.nelement() for l in self.g_model.parameters()])))
+            logging.info('Number of parameters in generator: {}\n'.format(
+                sum([l.nelement() for l in self.g_model.parameters()])))
             self.print_model = False
 
     def _init_optim(self):
         # initialize optimizer
-        self.g_optimizer = torch.optim.Adam(self.g_model.parameters(), lr=self.args.lr, betas=self.args.gen_betas, weight_decay=self.args.dct_weight_decay)
-        #self.g_optimizer = torch.optim.SGD(self.g_model.parameters(), lr=self.args.lr,momentum=0.9)
+        self.g_optimizer = torch.optim.Adam(self.g_model.parameters(), lr=self.args.lr, betas=self.args.gen_betas,
+                                            weight_decay=self.args.dct_weight_decay)
+        # self.g_optimizer = torch.optim.SGD(self.g_model.parameters(), lr=self.args.lr,momentum=0.9)
 
         # initialize scheduler
         self.g_scheduler = StepLR(self.g_optimizer, step_size=self.args.step_size, gamma=self.args.gamma)
 
         # initialize criterion
         if self.args.reconstruction_weight:
-            self.reconstruction = L2Loss_image().to(self.device) #torch.nn.L1Loss().to(self.args.device) #torch.nn.MSELoss().to(self.args.device)
+            self.reconstruction = L2Loss_image().to(
+                self.device)  # torch.nn.L1Loss().to(self.args.device) #torch.nn.MSELoss().to(self.args.device)
         if self.args.perceptual_weight > 0.:
-            self.perceptual = PerceptualLoss(features_to_compute=['conv5_4'], criterion=torch.nn.L1Loss(), shave_edge=self.invalidity_margins).to(self.args.device)
+            self.perceptual = PerceptualLoss(features_to_compute=['conv5_4'], criterion=torch.nn.L1Loss(),
+                                             shave_edge=self.invalidity_margins).to(self.args.device)
         if self.args.textural_weight > 0.:
-            self.textural = TexturalLoss(features_to_compute=['relu3_1', 'relu2_1'], shave_edge=self.invalidity_margins).to(self.args.device)
+            self.textural = TexturalLoss(features_to_compute=['relu3_1', 'relu2_1'],
+                                         shave_edge=self.invalidity_margins).to(self.args.device)
         if self.args.range_weight > 0.:
             self.range = RangeLoss(invalidity_margins=self.invalidity_margins).to(self.args.device)
 
-        if self.args.ssim_reconstruction_weight:
-            self.reconstruction = L2Loss_image().to(self.device)
+        # if self.args.ssim_reconstruction_weight:
+        #     self.reconstruction = L2Loss_image().to(self.device)
 
     def _init(self):
         # init parameters
         self.steps = 0
-        self.losses = {'D': [], 'D_r': [], 'D_gp': [], 'D_f': [], 'G': [], 'G_recon': [], 'G_rng': [], 'G_perc': [], 'G_txt': [], 'G_adv': [], 'psnr': [], 'best_model_psnr': [], 'tnrd_loss': [], 'high_freq_loss': [], 'psnr_train': []}
+        self.losses = {'D': [], 'D_r': [], 'D_gp': [], 'D_f': [], 'G': [], 'G_recon': [], 'G_rng': [], 'G_perc': [],
+                       'G_txt': [], 'G_adv': [], 'psnr': [], 'best_model_psnr': [], 'tnrd_loss': [],
+                       'high_freq_loss': [], 'psnr_train': []}
 
         # initialize model
         self._init_model()
@@ -143,157 +154,52 @@ class Trainer():
         # initialize optimizer
         self._init_optim()
 
-        self.cached_output={}  
-        self.cached_input={} 
-        self.pad_input=torchvision.transforms.Pad(5,padding_mode='edge')
+        self.cached_output = {}
+        self.cached_input = {}
+        self.pad_input = torchvision.transforms.Pad(5, padding_mode='edge')
 
-        def hook(name,module, input, output):
+        def hook(name, module, input, output):
             if isinstance(module, RBF):
                 self.cached_output[name] = output[1]
             else:
-                #self.cached_input[name] = input[0][0]    
-                self.cached_input[name] = output[0]    
-        self.handlers=[]
+                # self.cached_input[name] = input[0][0]
+                self.cached_input[name] = output[0]
+
+        self.handlers = []
         for name, m in self.g_model.named_modules():
             if (isinstance(m, RBF) or isinstance(m, TNRDConv2d) or isinstance(m, TNRDlayer)):
-                self.handlers.append(m.register_forward_hook(partial(hook,name)))
+                self.handlers.append(m.register_forward_hook(partial(hook, name)))
 
-    def tnrd_loss(self,f):
-        loss=0
-        for key_u,key_r in zip(self.cached_input.keys(),self.cached_output.keys()):
-            layer_loss = self.cached_output[key_r] #+0.5*(self.cached_input[key_u]-self.pad_input(f)).pow(2)
-            loss += layer_loss.mean()                       
-        return torch.exp(loss/20)
-    
-    def greedy_loss(self,target):
-        loss=0
-        for ind,key in enumerate(self.cached_input.keys()):
-            layer_loss = l2_loss_image(self.cached_input[key],target) # F.l1_loss(self.cached_input[key],target)
-            loss += layer_loss.mean()                        
-        return loss 
+    def tnrd_loss(self, f):
+        loss = 0
+        for key_u, key_r in zip(self.cached_input.keys(), self.cached_output.keys()):
+            layer_loss = self.cached_output[key_r]  # +0.5*(self.cached_input[key_u]-self.pad_input(f)).pow(2)
+            loss += layer_loss.mean()
+        return torch.exp(loss / 20)
+
+    def greedy_loss(self, target):
+        loss = 0
+        for ind, key in enumerate(self.cached_input.keys()):
+            layer_loss = l2_loss_image(self.cached_input[key], target)  # F.l1_loss(self.cached_input[key],target)
+            loss += layer_loss.mean()
+        return loss
+
+    def layer_loss(self, target, loss_from_layer):
+        # print("layer_loss--"+str(loss_from_layer))
+        layer_input_ind = 1  # 1-5
+        for ind, key in enumerate(self.cached_input.keys()):
+            # for ind, key in enumerate(self.cached_output.keys()):
+            if (layer_input_ind - 1) == loss_from_layer:
+                layer_loss = l2_loss_image(self.cached_input[key], target)  # F.l1_loss(self.cached_input[key],target)
+                return layer_loss.mean()
+            layer_input_ind += 1
 
     def _save_model(self, epoch):
         # save models
-        torch.save(self.g_model.state_dict(), os.path.join(self.args.save_path, '{}_e{}.pt'.format(self.args.g_model, epoch + 1)))
+        torch.save(self.g_model.state_dict(),
+                   os.path.join(self.args.save_path, '{}_e{}.pt'.format(self.args.g_model, epoch + 1)))
         # torch.save(self.d_model.state_dict(), os.path.join(self.args.save_path, '{}_e{}.pt'.format(self.args.d_model, epoch + 1)))
         torch.save(self.losses, os.path.join(self.args.save_path, 'losses_e{}.pt'.format(epoch + 1)))
-
-    def _set_require_grads(self, model, require_grad):
-        for p in model.parameters():
-            p.requires_grad_(require_grad)
-
-
-    def _critic_hinge_iteration(self, inputs, targets):
-        # require grads
-        self._set_require_grads(self.d_model, True)
-
-        # get generated data
-        generated_data = self.g_model(inputs)
-
-        # zero grads
-        self.d_optimizer.zero_grad()
-
-        # calculate probabilities on real and generated data
-        d_real = self.d_model(targets)
-        d_generated = self.d_model(generated_data.detach())
-
-        # create total loss and optimize
-        loss_r = F.relu(1.0 - d_real).mean()
-        loss_f = F.relu(1.0 + d_generated).mean()
-        #loss_tnrd = self.tnrd_loss(inputs)
-        #import pdb; pdb.set_trace()  
-        loss = loss_r + loss_f #+ loss_tnrd
-
-        # get gradient penalty
-        if self.args.penalty_weight > 0.:
-            gradient_penalty = self._gradient_penalty(targets, generated_data)
-            loss += gradient_penalty
-
-        loss.backward()
-
-        self.d_optimizer.step()
-
-        # record loss
-        self.losses['D'].append(loss.data.item())
-        self.losses['D_r'].append(loss_r.data.item())
-        self.losses['D_f'].append(loss_f.data.item())
-        if self.args.penalty_weight > 0.:
-            self.losses['D_gp'].append(gradient_penalty.data.item())
-
-        # require grads
-        self._set_require_grads(self.d_model, False)
-
-    def _critic_wgan_iteration(self, inputs, targets):
-        # require grads
-        self._set_require_grads(self.d_model, True)
-
-        # get generated data
-        generated_data = self.g_model(inputs)
-
-        # zero grads
-        self.d_optimizer.zero_grad()
-
-        # calculate probabilities on real and generated data
-        d_real = self.d_model(targets)
-        d_generated = self.d_model(generated_data.detach())
-
-        # create total loss and optimize
-        if self.args.relativistic:
-            loss_r = -(d_real - d_generated.mean()).mean()
-            loss_f = (d_generated - d_real.mean()).mean()
-        else:
-            loss_r = -d_real.mean()
-            loss_f = d_generated.mean()
-        loss = loss_f + loss_r
-
-        # get gradient penalty
-        if self.args.penalty_weight > 0.:
-            gradient_penalty = self._gradient_penalty(targets, generated_data)
-            loss += gradient_penalty
-
-        loss.backward()
-
-        self.d_optimizer.step()
-
-        # record loss
-        self.losses['D'].append(loss.data.item())
-        self.losses['D_r'].append(loss_r.data.item())
-        self.losses['D_f'].append(loss_f.data.item())
-        if self.args.penalty_weight > 0.:
-            self.losses['D_gp'].append(gradient_penalty.data.item())
-
-        # require grads
-        self._set_require_grads(self.d_model, False)
-
-    def _gradient_penalty(self, real_data, generated_data):
-        batch_size = real_data.size()[0]
-
-        # calculate interpolation
-        alpha = torch.rand(batch_size, 1, 1, 1)
-        alpha = alpha.expand_as(real_data)
-        alpha = alpha.to(self.device)
-        interpolated = alpha * real_data.data + (1 - alpha) * generated_data.data
-        interpolated = Variable(interpolated, requires_grad=True)
-        interpolated = interpolated.to(self.device)
-
-        # calculate probability of interpolated examples
-        prob_interpolated = self.d_model(interpolated)
-
-        # calculate gradients of probabilities with respect to examples
-        gradients = torch_grad(outputs=prob_interpolated, inputs=interpolated,
-                               grad_outputs=torch.ones(prob_interpolated.size()).to(self.device),
-                               create_graph=True, retain_graph=True)[0]
-
-        # gradients have shape (batch_size, num_channels, img_width, img_height),
-        # so flatten to easily take norm per example in batch
-        gradients = gradients.view(batch_size, -1)
-
-        # derivatives of the gradient close to 0 can cause problems because of
-        # the square root, so manually calculate norm and add epsilon
-        gradients_norm = gradients.norm(p=2, dim=1)
-
-        # return gradient penalty
-        return ((gradients_norm - 1) ** 2).mean()
 
     def _generator_iteration(self, inputs, targets):
         # zero grads
@@ -303,48 +209,11 @@ class Trainer():
         generated_data = self.g_model(inputs)
         loss = 0.
 
-        # reconstruction loss
-        if self.args.reconstruction_weight > 0.:
-            loss_recon = self.reconstruction(generated_data, targets)
-            loss += loss_recon * self.args.reconstruction_weight
-            self.losses['G_recon'].append(loss_recon.data.item())
-
-        # chen - i removed it
-        # # range loss
-        # if self.args.range_weight > 0.:
-        #     loss_rng = self.range(generated_data)
-        #     loss += loss_rng * self.args.range_weight
-        #     self.losses['G_rng'].append(loss_rng.data.item())
-        #
-        # # adversarial loss
-        # if self.args.adversarial_weight > 0.:
-        #     d_generated = self.d_model(generated_data)
-        #     if self.args.relativistic:
-        #        d_real = self.d_model(targets)
-        #        loss_adv = (d_real - d_generated.mean()).mean() - (d_generated - d_real.mean()).mean()
-        #     else:
-        #         loss_adv = -d_generated.mean()
-        #     loss += loss_adv * self.args.adversarial_weight
-        #     self.losses['G_adv'].append(loss_adv.data.item())
-        #
-        # # perceptual loss
-        # if self.args.perceptual_weight > 0.:
-        #     loss_perc = self.perceptual(generated_data, targets)
-        #     loss += loss_perc * self.args.perceptual_weight
-        #     self.losses['G_perc'].append(loss_perc.data.item())
-        #
-        # # textural loss
-        # if self.args.textural_weight > 0.:
-        #     loss_txt = self.textural(generated_data, targets)
-        #     loss += loss_txt * self.args.textural_weight
-        #     self.losses['G_txt'].append(loss_txt.data.item())
-
-        #self.losses['tnrd_loss'].append(self.tnrd_loss(inputs).item())
-
-        # chen - i removed it
-        #if self.args.tnrd_energy_weight > 0.:
-        #    loss+=self.args.tnrd_energy_weight*self.tnrd_loss(inputs)
-
+        # # reconstruction loss
+        # if self.args.reconstruction_weight > 0.:
+        #     loss_recon = self.reconstruction(generated_data, targets)
+        #     loss += loss_recon * self.args.reconstruction_weight
+        #     self.losses['G_recon'].append(loss_recon.data.item())
 
         # high freq regularization
         if self.args.high_frequency_energy_weight > 0.:
@@ -357,7 +226,7 @@ class Trainer():
             dct_penalty_matrix = torch.tensor(dct_penalty_matrix).to(self.device)
             final_dct_penalty_matrix = torch.diag(dct_penalty_matrix.flatten().float()[1:])
 
-            #test:
+            # test:
             # t = torch.ones(24, 24).to(self.device)
             # res = t @ final_dct_penalty_matrix
 
@@ -374,28 +243,74 @@ class Trainer():
 
             self.losses['high_freq_loss'].append(high_freq_loss)
 
-            #print("loss{}, high frequency loss: {}".format(loss, high_freq_loss))
+            # print("loss{}, high frequency loss: {}".format(loss, high_freq_loss))
             loss = loss + self.args.high_frequency_energy_weight * high_freq_loss
-
-        ##
-        # l1 regularization
-        # L1_reg = torch.tensor(0., requires_grad=True)
-        # for name, param in self.g_model.features_to_image.named_parameters():
-        #     #print(name)
-        #     if 'weight' == name:
-        #         L1_reg = L1_reg + torch.norm(param, 1)
-        #         print("loss{}, L1_reg: {}".format(loss, L1_reg))
-        # loss +=0.01*L1_reg
-
-
         ######################################
 
-
-
         # chen: greedy - 1/3 of the epocs
+        # if self.args.use_greedy_training:
+        #     if self.steps<0.3*self.args.epochs * self.args.train_max_size: #2e4:
+        #        loss += self.greedy_loss(targets)
+
+
+        #
+        total_number_of_layers = dict({}, **literal_eval(self.args.model_config))['gen_blocks']+2  # 5
+        number_of_epocs_of_each_layer = np.floor(0.5 * self.args.epochs / (total_number_of_layers - 1))
         if self.args.use_greedy_training:
-            if self.steps<0.3*self.args.epochs * self.args.train_max_size: #2e4:
-               loss += self.greedy_loss(targets)
+            layer_to_train = int(np.floor(self.current_epoc / number_of_epocs_of_each_layer))
+            if layer_to_train < total_number_of_layers:
+
+                # print("steps={}, layer_to_train={}".format(self.steps, layer_to_train))
+
+                for name, param in self.g_model.image_to_features.named_parameters():
+                    if layer_to_train == 1:
+                        param.requires_grad_(True)
+                    else:
+                        param.requires_grad_(False)
+                for name, param in self.g_model.features.named_parameters():
+                    layer_ind = 1 + (int(name[0]) + 1)
+                    if layer_ind == layer_to_train:
+                        param.requires_grad_(True)
+                    else:
+                        param.requires_grad_(False)
+                for name, param in self.g_model.features_to_image.named_parameters():
+                    if layer_ind == layer_to_train:
+                        param.requires_grad_(True)
+                    else:
+                        param.requires_grad_(False)
+
+                loss_recon = self.layer_loss(targets, layer_to_train)
+                loss += loss_recon * self.args.reconstruction_weight
+                self.losses['G_recon'].append(loss_recon.data.item())
+
+                ##
+                # print requre grad status:
+                # for name, param in self.g_model.image_to_features.named_parameters():
+                #     print(param.requires_grad)
+
+                ##
+
+            else:
+                if layer_to_train == total_number_of_layers:
+                    for name, param in self.g_model.image_to_features.named_parameters():
+                        param.requires_grad_(True)
+                    for name, param in self.g_model.features.named_parameters():
+                        param.requires_grad_(True)
+                    for name, param in self.g_model.features_to_image.named_parameters():
+                        param.requires_grad_(True)
+
+                # reconstruction loss
+                if self.args.reconstruction_weight > 0.:
+                    loss_recon = self.reconstruction(generated_data, targets)
+                    loss += loss_recon * self.args.reconstruction_weight
+                    self.losses['G_recon'].append(loss_recon.data.item())
+        else:
+            # reconstruction loss
+            if self.args.reconstruction_weight > 0.:
+                loss_recon = self.reconstruction(generated_data, targets)
+                loss += loss_recon * self.args.reconstruction_weight
+                self.losses['G_recon'].append(loss_recon.data.item())
+        ###
 
         # ssim reconstruction loss
         # if self.args.ssim_reconstruction_weight > 0.:
@@ -405,13 +320,13 @@ class Trainer():
         #     loss += loss_ssim_recon * self.args.ssim_reconstruction_weight
         #     self.losses['ssim_recon'].append(loss_ssim_recon.data.item())
 
-        #if len(self.losses['G_recon'])>1 and self.losses['G_recon'][-1]< min(self.losses['G_recon'][:-1]):
+        # if len(self.losses['G_recon'])>1 and self.losses['G_recon'][-1]< min(self.losses['G_recon'][:-1]):
         #    print('new best G_recon model: ', self.losses['G_recon'][-1])
         #    torch.save(self.g_model.state_dict(),'best_g_model.pth')
         # backward loss
         loss.backward()
-        #debug
-        #for pp in self.g_model.parameters():
+        # debug
+        # for pp in self.g_model.parameters():
         #    if pp.grad is not None:
         #        print(pp.shape,pp.max(),pp.min(),pp.mean())
         #        print('grad - ',pp.grad.max(),pp.grad.min(),pp.grad.mean())
@@ -443,13 +358,15 @@ class Trainer():
         if self.steps % self.args.print_every == 0:
             line2print = 'Iteration {}'.format(self.steps + 1)
             if self.args.adversarial_weight > 0.:
-                line2print += ', D: {:.6f}, D_r: {:.6f}, D_f: {:.6f}'.format(self.losses['D'][-1], self.losses['D_r'][-1], self.losses['D_f'][-1])
+                line2print += ', D: {:.6f}, D_r: {:.6f}, D_f: {:.6f}'.format(self.losses['D'][-1],
+                                                                             self.losses['D_r'][-1],
+                                                                             self.losses['D_f'][-1])
                 if self.args.penalty_weight > 0.:
                     line2print += ', D_gp: {:.6f}'.format(self.losses['D_gp'][-1])
             if self.steps > self.args.num_critic:
-                line2print += ', G: {:.5f}'.format(sum(self.losses['G'][-100:])/100)
+                line2print += ', G: {:.5f}'.format(sum(self.losses['G'][-100:]) / 100)
                 if self.args.reconstruction_weight:
-                    line2print += ', G_recon: {:.6f}'.format(sum(self.losses['G_recon'][-100:])/100)
+                    line2print += ', G_recon: {:.6f}'.format(sum(self.losses['G_recon'][-100:]) / 100)
                 if self.args.range_weight:
                     line2print += ', G_rng: {:.6f}'.format(self.losses['G_rng'][-1])
                 if self.args.perceptual_weight:
@@ -458,7 +375,7 @@ class Trainer():
                     line2print += ', G_txt: {:.8f}'.format(self.losses['G_txt'][-1])
                 if self.args.adversarial_weight:
                     line2print += ', G_adv: {:.6f},'.format(self.losses['G_adv'][-1])
-                #if True:
+                # if True:
                 #    line2print += ', tnrd_loss: {:.6f},'.format(self.losses['tnrd_loss'][-1])
 
                 if self.args.high_frequency_energy_weight:
@@ -472,7 +389,7 @@ class Trainer():
             if self.steps > self.args.num_critic:
                 self.tb.add_scalar('data/loss_g', self.losses['G'][-1], self.steps)
 
-    def _eval_iteration(self, data, epoch,ii):
+    def _eval_iteration(self, data, epoch, ii):
         # set inputs
         inputs = data['input'].to(self.device)
         targets = data['target']
@@ -486,37 +403,35 @@ class Trainer():
         # plt.show()
 
         with torch.no_grad():
-            outputs = self.g_model(inputs) 
-        # if ii==_EImage:  # chen: i remove it!
-        if False: #chen: i added it
-            image = Image.fromarray(inputs.squeeze().squeeze().clamp(0,255).round().cpu().numpy().astype(np.uint8))
-            image.save('noisy_%s.png'%(self.args.noise_sigma))            
-            image = Image.fromarray(outputs.squeeze().squeeze().clamp(0,255).round().cpu().numpy().astype(np.uint8))
-            image.save('clean_%s.png'%(self.args.noise_sigma))
-            image = Image.fromarray(targets.squeeze().squeeze().clamp(0,255).round().cpu().numpy().astype(np.uint8))
-            image.save('target_%s.png'%(self.args.noise_sigma))        
-        # save image and compute psnr
+            outputs = self.g_model(inputs)
+            # if ii==_EImage:  # chen: i remove it!
+        if False:  # chen: i added it
+            image = Image.fromarray(inputs.squeeze().squeeze().clamp(0, 255).round().cpu().numpy().astype(np.uint8))
+            image.save('noisy_%s.png' % (self.args.noise_sigma))
+            image = Image.fromarray(outputs.squeeze().squeeze().clamp(0, 255).round().cpu().numpy().astype(np.uint8))
+            image.save('clean_%s.png' % (self.args.noise_sigma))
+            image = Image.fromarray(targets.squeeze().squeeze().clamp(0, 255).round().cpu().numpy().astype(np.uint8))
+            image.save('target_%s.png' % (self.args.noise_sigma))
+            # save image and compute psnr
         # self._save_image(outputs, paths[0], epoch + 1)
         psnr = compute_psnr(outputs, targets)
 
         return psnr
-   
-   
+
     def _train_epoch(self, loader):
         self.g_model.train()
-        # self.d_model.train()
 
         # train over epochs
         for _, data in enumerate(loader):
             self._train_iteration(data)
 
     def _eval_epoch(self, loader, epoch, loader_train=None):
-        #sd_model = copy.deepcopy(self.g_model.state_dict())
+        # sd_model = copy.deepcopy(self.g_model.state_dict())
         self.g_model.eval()
         psnrs = []
         # eval over epoch
         for ii, data in enumerate(loader):
-            psnr = self._eval_iteration(data, epoch,ii)
+            psnr = self._eval_iteration(data, epoch, ii)
             psnrs.append(psnr)
         # record psnr
         self.losses['psnr'].append(average(psnrs))
@@ -532,7 +447,8 @@ class Trainer():
         if loader_train is None:
             logging.info('Evaluation: {:.3f}'.format(self.losses['psnr'][-1]))
         else:
-            logging.info("Evaluation: {:.3f},      Train-evaluation: {:.3f}".format(self.losses['psnr'][-1], self.losses['psnr_train'][-1]))
+            logging.info("Evaluation: {:.3f},      Train-evaluation: {:.3f}".format(self.losses['psnr'][-1],
+                                                                                    self.losses['psnr_train'][-1]))
         if self.args.use_tb:
             self.tb.add_scalar('data/psnr', self.losses['psnr'][-1], epoch)
 
@@ -543,9 +459,12 @@ class Trainer():
         save_image(image.data.cpu(), save_path)
 
     def _train(self, loaders):
+        self.current_epoc = 0
         # run epoch iterations
         for epoch in range(self.args.epochs):
-            # random seed 
+            self.current_epoc += 1
+
+            # random seed
             torch.manual_seed(random.randint(1, 123456789))
 
             logging.info('\nEpoch {}'.format(epoch + 1))
@@ -563,7 +482,7 @@ class Trainer():
                 self._save_model(epoch)
 
         # best score
-        
+
         logging.info('Best PSNR Score: {:.2f}\n'.format(max(self.losses['psnr'])))
 
     def train(self):

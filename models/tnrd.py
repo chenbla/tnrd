@@ -305,6 +305,7 @@ class Generator(nn.Module):
         super(Generator, self).__init__()
 
         self.args = all_args
+        setattr(all_args, 'gen_blocks', gen_blocks)
 
         use_dct = (not self.args.dont_use_dct)
 

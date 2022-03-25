@@ -6,10 +6,14 @@ import glob
 from anlysis.utils import get_loss_vec, get_train_max_psnr, smooth
 from statistics import mean
 
-outputs_dir_main_folder = "C:/project/denoising_my/results/results_automation_overfitting/"#"results/overfitting_results/"
+outputs_dir_main_folder = "C:/project/denoising_my/results/results_automation_overfitting/"
 
+# outputs_dir_main_folder = "../results/results_automation_before_new_dataset/"#"../results/results_automation/"#sigma=50
 outputs_dir_main_folder = "../results/results_automation/"#sigma=50
 # outputs_dir_main_folder = "/home/chenkatz@staff.technion.ac.il/tnrd/results/results_automation/" #sigma=25
+
+# outputs_dir_main_folder = "/home/chenkatz/tnrd/results/results_automation/" #sigma=25
+
 
 color=['red','green','blue', 'black', 'brown']
 
@@ -127,8 +131,9 @@ def cmp_to_original(tag, show_train, show_test):
                 print("cant find loss vec in: " + output_dir)
                 continue
             test_psnr = max(loss_vec)
+            # test_psnr = np.median(loss_vec)
 
-            print(curr_label + str(test_psnr))
+            print(curr_label +": test: " + str(test_psnr) + ", train: " + str(train_psnr))
 
 
             if show_test:
@@ -138,7 +143,7 @@ def cmp_to_original(tag, show_train, show_test):
                 else:
                     plt.scatter(num_of_samples, test_psnr, color=color[color_index])
 
-            if show_train:
+            if show_train and train_psnr is not None:
                 if curr_label+"train" not in labels:
                     labels.append(curr_label+"train")
                     plt.scatter(num_of_samples ,train_psnr, label=curr_label+"train", color=color[color_index+1])
@@ -158,4 +163,4 @@ def cmp_to_original(tag, show_train, show_test):
 # cmp_test_psnr()
 cmp_to_original(tag = "high-frequency-loss", show_train=True, show_test=True)
 
-# cmp_to_original(tag = "dct-weight-decay", show_train=False, show_test=True)
+# cmp_to_original(tag = "dct-weight-decay", show_train=True, show_test=True)

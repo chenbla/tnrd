@@ -32,5 +32,8 @@ def get_loss_vec(output_dir, loss_type='psnr'):
 def get_train_max_psnr(output_dir):
     
     mse_loss_vec = get_loss_vec(output_dir, loss_type='psnr_train')
-    min_mse = min(mse_loss_vec)
-    return min_mse
+    if mse_loss_vec is None:
+        return None
+    max_mse = max(mse_loss_vec)
+    # max_mse = np.median(mse_loss_vec)
+    return max_mse
