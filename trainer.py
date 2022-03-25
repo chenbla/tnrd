@@ -257,7 +257,9 @@ class Trainer():
         total_number_of_layers = dict({}, **literal_eval(self.args.model_config))['gen_blocks']+2  # 5
         number_of_epocs_of_each_layer = np.floor(0.5 * self.args.epochs / (total_number_of_layers - 1))
         if self.args.use_greedy_training:
-            layer_to_train = int(np.floor(self.current_epoc / number_of_epocs_of_each_layer))
+            layer_to_train = int(np.floor(self.current_epoc / number_of_epocs_of_each_layer)) +1
+            if number_of_epocs_of_each_layer == 1:
+                layer_to_train -= 1
             if layer_to_train < total_number_of_layers:
 
                 # print("steps={}, layer_to_train={}".format(self.steps, layer_to_train))
@@ -300,10 +302,9 @@ class Trainer():
                         param.requires_grad_(True)
 
                 # reconstruction loss
-                if self.args.reconstruction_weight > 0.:
-                    loss_recon = self.reconstruction(generated_data, targets)
-                    loss += loss_recon * self.args.reconstruction_weight
-                    self.losses['G_recon'].append(loss_recon.data.item())
+                loss_recon = self.reconstruction(generated_data, targets)
+                loss += loss_recon * self.args.reconstruction_weight
+                self.losses['G_recon'].append(loss_recon.data.item())
         else:
             # reconstruction loss
             if self.args.reconstruction_weight > 0.:
