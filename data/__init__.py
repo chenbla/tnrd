@@ -7,7 +7,8 @@ def get_loaders(args):
     # chen - before changes
     #dataset_train = DatasetNoise(root=os.path.join(args.root, 'train'), noise_sigma=args.noise_sigma, training=True, crop_size=args.crop_size, blind_denoising=args.blind, gray_scale=args.gray_scale)
     # chen - after changes
-    dataset_train = DatasetNoise(root=os.path.join(args.root, 'train'), noise_sigma=args.noise_sigma, training=True, crop_size=args.crop_size, blind_denoising=args.blind, gray_scale=args.gray_scale, max_size=args.train_max_size)
+    dataset_train = DatasetNoise(root=os.path.join(args.root, 'train'), noise_sigma=args.noise_sigma, training=True, crop_size=args.crop_size, blind_denoising=args.blind, gray_scale=args.gray_scale, max_size=args.train_max_size, dont_use_augmentation=args.dont_use_augmentation)
+    # dataset_train = DatasetNoise(root=os.path.join(args.root, 'train'), noise_sigma=args.noise_sigma, training=True, crop_size=args.crop_size, blind_denoising=args.blind, gray_scale=args.gray_scale, max_size=args.train_max_size)
     dataset_val = DatasetNoise(root=os.path.join(args.root, 'val'), noise_sigma=args.noise_sigma, training=False, crop_size=args.crop_size, blind_denoising=args.blind, gray_scale=args.gray_scale, max_size=args.max_size)
     dataset_train_eval = DatasetNoise(root=os.path.join(args.root, 'train'), noise_sigma=args.noise_sigma, training=False, crop_size=args.crop_size, blind_denoising=args.blind, gray_scale=args.gray_scale, max_size=args.max_size)
 

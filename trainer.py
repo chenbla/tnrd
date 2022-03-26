@@ -21,6 +21,8 @@ from torch.autograd.function import InplaceFunction
 from PIL import Image
 import numpy as np
 
+from ssim.pytorch_ssim import ssim
+
 _EImage = -1
 
 
@@ -138,15 +140,12 @@ class Trainer():
         if self.args.range_weight > 0.:
             self.range = RangeLoss(invalidity_margins=self.invalidity_margins).to(self.args.device)
 
-        # if self.args.ssim_reconstruction_weight:
-        #     self.reconstruction = L2Loss_image().to(self.device)
-
     def _init(self):
         # init parameters
         self.steps = 0
         self.losses = {'D': [], 'D_r': [], 'D_gp': [], 'D_f': [], 'G': [], 'G_recon': [], 'G_rng': [], 'G_perc': [],
                        'G_txt': [], 'G_adv': [], 'psnr': [], 'best_model_psnr': [], 'tnrd_loss': [],
-                       'high_freq_loss': [], 'psnr_train': []}
+                       'high_freq_loss': [], 'psnr_train': [], 'ssim_train': [], 'ssim_test': []}
 
         # initialize model
         self._init_model()
@@ -190,8 +189,9 @@ class Trainer():
         for ind, key in enumerate(self.cached_input.keys()):
             # for ind, key in enumerate(self.cached_output.keys()):
             if (layer_input_ind - 1) == loss_from_layer:
-                layer_loss = l2_loss_image(self.cached_input[key], target)  # F.l1_loss(self.cached_input[key],target)
-                return layer_loss.mean()
+                l2_loss = l2_loss_image(self.cached_input[key], target)  # F.l1_loss(self.cached_input[key],target)
+                ssim_loss = (1 - ssim(self.cached_input[key], target))
+                return l2_loss, ssim_loss
             layer_input_ind += 1
 
     def _save_model(self, epoch):
@@ -214,6 +214,13 @@ class Trainer():
         #     loss_recon = self.reconstruction(generated_data, targets)
         #     loss += loss_recon * self.args.reconstruction_weight
         #     self.losses['G_recon'].append(loss_recon.data.item())
+
+        # # ssim reconstruction loss
+        # if self.args.ssim_reconstruction_weight > 0.:
+        #     # https://stackoverflow.com/questions/53956932/use-pytorch-ssim-loss-function-in-my-model
+        #     from ssim.pytorch_ssim import ssim
+        #     ssim_out = 200*(1-ssim(generated_data, targets))#.data#.item()  # [0]
+        #     loss += ssim_out
 
         # high freq regularization
         if self.args.high_frequency_energy_weight > 0.:
@@ -259,6 +266,7 @@ class Trainer():
         if self.args.use_greedy_training:
             layer_to_train = int(np.floor(self.current_epoc / number_of_epocs_of_each_layer))
             if layer_to_train < total_number_of_layers:
+                layer_to_train+=1
 
                 # print("steps={}, layer_to_train={}".format(self.steps, layer_to_train))
 
@@ -279,9 +287,12 @@ class Trainer():
                     else:
                         param.requires_grad_(False)
 
-                loss_recon = self.layer_loss(targets, layer_to_train)
-                loss += loss_recon * self.args.reconstruction_weight
-                self.losses['G_recon'].append(loss_recon.data.item())
+                l2_loss, ssim_loss = self.layer_loss(targets, layer_to_train)
+                loss += l2_loss * self.args.reconstruction_weight
+                loss += ssim_loss * self.args.ssim_reconstruction_weight
+                self.losses['G_recon'].append(l2_loss.data.item())
+
+                # print(loss)
 
                 ##
                 # print requre grad status:
@@ -304,21 +315,28 @@ class Trainer():
                     loss_recon = self.reconstruction(generated_data, targets)
                     loss += loss_recon * self.args.reconstruction_weight
                     self.losses['G_recon'].append(loss_recon.data.item())
+
+                if self.args.ssim_reconstruction_weight > 0.:
+                    # https://stackoverflow.com/questions/53956932/use-pytorch-ssim-loss-function-in-my-model
+                    ssim_out = (1 - ssim(generated_data, targets))  # .data#.item()  # [0]
+                    # ssim_value = ssim(generated_data, targets)
+                    loss += ssim_out * self.args.ssim_reconstruction_weight
         else:
             # reconstruction loss
             if self.args.reconstruction_weight > 0.:
                 loss_recon = self.reconstruction(generated_data, targets)
                 loss += loss_recon * self.args.reconstruction_weight
                 self.losses['G_recon'].append(loss_recon.data.item())
+
+            # ssim reconstruction loss
+            if self.args.ssim_reconstruction_weight > 0.:
+                # https://stackoverflow.com/questions/53956932/use-pytorch-ssim-loss-function-in-my-model
+                ssim_out = (1 - ssim(generated_data, targets))  # .data#.item()  # [0]
+                # ssim_value = ssim(generated_data, targets)
+                loss += ssim_out * self.args.ssim_reconstruction_weight
         ###
 
-        # ssim reconstruction loss
-        # if self.args.ssim_reconstruction_weight > 0.:
-        #     # https://stackoverflow.com/questions/53956932/use-pytorch-ssim-loss-function-in-my-model
-        #     # maximize the ssim loss -> minimize the ssim loss
-        #     loss_ssim_recon = self.reconstruction(generated_data, targets)
-        #     loss += loss_ssim_recon * self.args.ssim_reconstruction_weight
-        #     self.losses['ssim_recon'].append(loss_ssim_recon.data.item())
+
 
         # if len(self.losses['G_recon'])>1 and self.losses['G_recon'][-1]< min(self.losses['G_recon'][:-1]):
         #    print('new best G_recon model: ', self.losses['G_recon'][-1])
@@ -413,7 +431,7 @@ class Trainer():
             image = Image.fromarray(targets.squeeze().squeeze().clamp(0, 255).round().cpu().numpy().astype(np.uint8))
             image.save('target_%s.png' % (self.args.noise_sigma))
             # save image and compute psnr
-        # self._save_image(outputs, paths[0], epoch + 1)
+        self._save_image(outputs, paths[0], epoch + 1)
         psnr = compute_psnr(outputs, targets)
 
         return psnr
@@ -437,10 +455,14 @@ class Trainer():
         self.losses['psnr'].append(average(psnrs))
 
         psnrs_train = []
+        # ssim_train = []
         if loader_train is not None:
             for ii, data in enumerate(loader_train):
                 psnr = self._eval_iteration(data, epoch, ii)
                 psnrs_train.append(psnr)
+
+                # ssim = (1 - ssim(generated_data, targets))
+                # ssim_train.append()
             # record psnr
             self.losses['psnr_train'].append(average(psnrs_train))
 
