@@ -59,7 +59,7 @@ def get_arguments():
     parser.add_argument('--use_dct_drop_out', default=False, action='store_true')
     parser.add_argument('--dont_use_dct', default=False, action='store_true')
     parser.add_argument('--dct_weight_decay', default=0.0, type=float, help='dct_weight_decay (default: 0.0)')
-    parser.add_argument('--ssim-reconstruction-weight', default=1.0, type=float, help='')
+    parser.add_argument('--ssim-reconstruction-weight', default=0.0, type=float, help='')
     parser.add_argument('--dont_use_augmentation', default=False, action='store_true')
 
     args = parser.parse_args()
