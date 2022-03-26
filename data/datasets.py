@@ -56,13 +56,14 @@ class DatasetNoise(torch.utils.data.dataset.Dataset):
         # if self.training:
         #     aug_params = self._get_augment_params(target.size)
         #     target = self._augment(target, aug_params)
-        if self.dont_use_augmentation:
-            x = 0
-            y = 0
-            target = target.crop((x, y, x + self.crop_size, y + self.crop_size))
-        else:
-            aug_params = self._get_augment_params(target.size)
-            target = self._augment(target, aug_params)
+        if self.training:
+            if self.dont_use_augmentation:
+                x = 0
+                y = 0
+                target = target.crop((x, y, x + self.crop_size, y + self.crop_size))
+            else:
+                aug_params = self._get_augment_params(target.size)
+                target = self._augment(target, aug_params)
         target = self.image_transform(target)*255
 
         # add noise
