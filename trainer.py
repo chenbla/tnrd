@@ -264,7 +264,9 @@ class Trainer():
         total_number_of_layers = dict({}, **literal_eval(self.args.model_config))['gen_blocks']+2  # 5
         number_of_epocs_of_each_layer = np.floor(0.5 * self.args.epochs / (total_number_of_layers - 1))
         if self.args.use_greedy_training:
-            layer_to_train = int(np.floor(self.current_epoc / number_of_epocs_of_each_layer))
+            layer_to_train = int(np.floor(self.current_epoc / number_of_epocs_of_each_layer)) +1
+            if number_of_epocs_of_each_layer == 1:
+                layer_to_train -= 1
             if layer_to_train < total_number_of_layers:
                 layer_to_train+=1
 
