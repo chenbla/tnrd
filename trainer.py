@@ -184,7 +184,7 @@ class Trainer():
         return loss
 
     def layer_loss(self, target, loss_from_layer):
-        # print("layer_loss--"+str(loss_from_layer))
+        print("layer_loss--"+str(loss_from_layer))
         layer_input_ind = 1  # 1-5
         for ind, key in enumerate(self.cached_input.keys()):
             # for ind, key in enumerate(self.cached_output.keys()):
@@ -268,7 +268,7 @@ class Trainer():
             if number_of_epocs_of_each_layer == 1:
                 layer_to_train -= 1
             if layer_to_train < total_number_of_layers:
-                layer_to_train+=1
+                # layer_to_train+=1
 
                 # print("steps={}, layer_to_train={}".format(self.steps, layer_to_train))
 
