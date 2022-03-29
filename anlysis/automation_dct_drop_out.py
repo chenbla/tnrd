@@ -23,7 +23,7 @@ def run_denoising(code_folder, sigma, epocs, lr, output_dir, train_max_size, use
 
 sigma_sizes = [25]
 train_sizes = [25, 50, 75, 125, 200, 300, 400]
-epocs = 10
+epocs = 1200
 lr = 1e-3
 high_frequency_energy_weight = 0
 use_greedy_training = True
