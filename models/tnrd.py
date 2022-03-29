@@ -218,8 +218,7 @@ class TNRDlayer(nn.Module):
 
             beta = self.beta if _BETA else 1
 
-
-            if self.args.use_dct_drop_out:
+            if self.args.use_dct_drop_out and self.training:
                 dct_filter_index_to_drop = int(torch.randint(0, 23, (1,))[0].numpy())
                 output = torch.cat((output[:,:dct_filter_index_to_drop,:,:], output[:,dct_filter_index_to_drop + 1:,:,:]), dim=1)
 
