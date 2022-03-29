@@ -433,7 +433,7 @@ class Trainer():
             image = Image.fromarray(targets.squeeze().squeeze().clamp(0, 255).round().cpu().numpy().astype(np.uint8))
             image.save('target_%s.png' % (self.args.noise_sigma))
             # save image and compute psnr
-        self._save_image(outputs, paths[0], epoch + 1)
+        # self._save_image(outputs, paths[0], epoch + 1)
         psnr = compute_psnr(outputs, targets)
 
         return psnr
