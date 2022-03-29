@@ -18,7 +18,7 @@ def run_denoising(code_folder, sigma, epocs, lr, output_dir, train_max_size, use
         arguments + " --dont_use_dct "
     if dct_weight_decay:
         arguments + " --dct_weight_decay "
-    command = "python main.py " + arguments
+    command = "python main.py " + arguments + " --dont_use_augmentation "
     run_command(command, code_folder)
 
 sigma_sizes = [25]
